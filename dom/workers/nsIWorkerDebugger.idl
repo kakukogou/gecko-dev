@@ -23,6 +23,7 @@ interface nsIWorkerDebugger : nsISupports
   const unsigned long TYPE_DEDICATED = 0;
   const unsigned long TYPE_SHARED = 1;
   const unsigned long TYPE_SERVICE = 2;
+  const unsigned long TYPE_VIDEO = 3;
 
   readonly attribute bool isClosed;
 

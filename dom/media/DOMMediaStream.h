@@ -28,12 +28,17 @@
 #undef CurrentTime
 #endif
 
+BEGIN_WORKERS_NAMESPACE
+class VideoWorkerPrivate;
+END_WORKERS_NAMESPACE
+
 namespace mozilla {
 
 class DOMLocalMediaStream;
 class MediaStream;
 class MediaEngineSource;
 class MediaStreamGraph;
+class MediaInputPort;
 
 namespace dom {
 class AudioNode;
@@ -256,6 +261,23 @@ public:
 
   virtual void NotifyMediaStreamTrackEnded(MediaStreamTrack* aTrack);
 
+  /**
+   * For VideoWorker
+   */
+  void AddWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
+                        TrackID aTrackID,
+                        const nsString& aID);
+  void RemoveWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
+                        TrackID aTrackID);
+
+  void
+  AddWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
+                     TrackID aTrackID,
+                     const nsString& aID,
+                     MediaInputPort* aPort);
+  void RemoveWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
+                             TrackID aTrackID);
+
 protected:
   virtual ~DOMMediaStream();
 
@@ -264,6 +286,8 @@ protected:
                         MediaStreamGraph* aGraph = nullptr);
   void InitTrackUnionStream(nsIDOMWindow* aWindow,
                             MediaStreamGraph* aGraph = nullptr);
+  void InitVideoProcessorStream(nsIDOMWindow* aWindow,
+                                MediaStreamGraph* aGraph = nullptr);
   void InitStreamCommon(MediaStream* aStream);
   already_AddRefed<AudioTrack> CreateAudioTrack(AudioStreamTrack* aStreamTrack);
   already_AddRefed<VideoTrack> CreateVideoTrack(VideoStreamTrack* aStreamTrack);
@@ -308,6 +332,9 @@ protected:
 
 private:
   void NotifyPrincipalChanged();
+
+  already_AddRefed<MediaStreamTrack>
+  CopyMediaStreamTrack(TrackID aTrackID, MediaSegment::Type aType);
 
   // Principal identifying who may access the contents of this stream.
   // If null, this stream can be used by anyone because it has no content yet.

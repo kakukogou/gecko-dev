@@ -14,8 +14,7 @@ namespace dom {
 
 class VideoStreamTrack : public MediaStreamTrack {
 public:
-  VideoStreamTrack(DOMMediaStream* aStream, TrackID aTrackID)
-    : MediaStreamTrack(aStream, aTrackID) {}
+  VideoStreamTrack(DOMMediaStream* aStream, TrackID aTrackID);
 
   virtual JSObject* WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) override;
 
@@ -23,6 +22,10 @@ public:
 
   // WebIDL
   virtual void GetKind(nsAString& aKind) override { aKind.AssignLiteral("video"); }
+
+  Pair<nsRefPtr<DOMMediaStream>, TrackID> mForkSource;
+  nsRefPtr<dom::workers::VideoWorkerPrivate> mVideoWorkerProcessor;
+
 };
 
 }

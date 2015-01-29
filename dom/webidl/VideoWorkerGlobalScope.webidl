@@ -4,19 +4,19 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  * The origin of this IDL file is
- * http://www.whatwg.org/specs/web-apps/current-work/multipage/workers.html#the-workerglobalscope-common-interface
+// TODO: Need API spec
  *
- * © Copyright 2004-2011 Apple Computer, Inc., Mozilla Foundation, and Opera
- * Software ASA.
  * You are granted a license to use, reproduce and create derivative works of
  * this document.
  */
 
-[Global=(Worker,DedicatedWorker,VideoWorker),
- Exposed=(DedicatedWorker,VideoWorker)]
-interface DedicatedWorkerGlobalScope : WorkerGlobalScope {
+[Global=(Worker,VideoWorker),
+ Exposed=VideoWorker]
+interface VideoWorkerGlobalScope : WorkerGlobalScope {
   [Throws]
   void postMessage(any message, optional sequence<any> transfer);
 
+  attribute EventHandler onvideoprocess;
   attribute EventHandler onmessage;
+  
 };

@@ -35,3 +35,16 @@ interface MediaStreamTrack {
 //                attribute EventHandler          onoverconstrained;
     void                   stop ();
 };
+
+// Mozilla extensions
+partial interface MediaStreamTrack {
+    // WorkerMonitor is for the case of just frames analysis without any modification.
+    // 'parameters' cloned and passed in VideoProcessEvent
+    void addWorkerMonitor(VideoWorker worker, object parameters);
+    void removeWorkerMonitor(VideoWorker worker, object parameters);
+
+    // WorkerProcessor is for the case of modifying frames must be generated in real time.
+    // 'parameters' cloned and passed in VideoProcessEvent
+    MediaStreamTrack addWorkerProcessor(VideoWorker worker, object parameters);
+    void removeWorkerProcessor(VideoWorker worker, object parameters); 
+};
