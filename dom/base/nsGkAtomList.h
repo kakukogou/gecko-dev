@@ -2353,3 +2353,5 @@ GK_ATOM(onboundary, "onboundary")
 #endif
 
 GK_ATOM(vr_state, "vr-state")
+
+GK_ATOM(onvideoprocess, "onvideoprocess")

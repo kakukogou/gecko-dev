@@ -247,6 +247,8 @@ class AudioNodeEngine;
 class AudioNodeExternalInputStream;
 class AudioNodeStream;
 class CameraPreviewMediaStream;
+class TrackUnionStream;
+class VideoProcessorStream;
 
 /**
  * A stream of synchronized audio and video data. All (not blocked) streams
@@ -430,6 +432,7 @@ public:
   virtual ProcessedMediaStream* AsProcessedStream() { return nullptr; }
   virtual AudioNodeStream* AsAudioNodeStream() { return nullptr; }
   virtual CameraPreviewMediaStream* AsCameraPreviewStream() { return nullptr; }
+  virtual TrackUnionStream* AsTrackUnionStream() { return nullptr; }
 
   // media graph thread only
   void Init();
@@ -1255,6 +1258,7 @@ public:
    * particular tracks of each input stream.
    */
   ProcessedMediaStream* CreateTrackUnionStream(DOMMediaStream* aWrapper);
+
   // Internal AudioNodeStreams can only pass their output to another
   // AudioNode, whereas external AudioNodeStreams can pass their output
   // to an nsAudioStream for playback.
