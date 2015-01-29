@@ -8,6 +8,9 @@
 #include "DOMMediaStream.h"
 #include "nsIUUIDGenerator.h"
 #include "nsServiceManagerUtils.h"
+#include "WorkerPrivate.h"
+//#include "MediaStreamTrackBinding.h"
+#include "AutoFuncLog.h"
 
 namespace mozilla {
 namespace dom {
@@ -15,7 +18,6 @@ namespace dom {
 MediaStreamTrack::MediaStreamTrack(DOMMediaStream* aStream, TrackID aTrackID)
   : mStream(aStream), mTrackID(aTrackID), mEnded(false), mEnabled(true)
 {
-
   nsresult rv;
   nsCOMPtr<nsIUUIDGenerator> uuidgen =
     do_GetService("@mozilla.org/uuid-generator;1", &rv);
@@ -62,5 +64,42 @@ MediaStreamTrack::Stop()
   mStream->StopTrack(mTrackID);
 }
 
+void
+MediaStreamTrack::AddWorkerMonitor(JSContext* cx,
+                                   workers::VideoWorkerPrivate& worker,
+                                   JS::Handle<JSObject*> parameters)
+{
+  mStream->AddWorkerMonitor(&worker, mTrackID, mID);
 }
+
+void
+MediaStreamTrack::RemoveWorkerMonitor(JSContext* cx,
+                                      workers::VideoWorkerPrivate& worker,
+                                      JS::Handle<JSObject*> parameters)
+{
+  mStream->RemoveWorkerMonitor(&worker, mTrackID);
 }
+
+already_AddRefed<MediaStreamTrack>
+MediaStreamTrack::AddWorkerProcessor(JSContext* cx,
+                                     workers::VideoWorkerPrivate& worker,
+                                     JS::Handle<JSObject*> parameters)
+{
+  TAFLOG();
+  TFLLOG("worker(%p)", &worker);
+  nsRefPtr<VideoStreamTrack> obj = new VideoStreamTrack(nullptr, -1);
+  obj->mVideoWorkerProcessor = &worker;
+  obj->mForkSource = MakePair(mStream, mTrackID);
+  return obj.forget();
+}
+
+void
+MediaStreamTrack::RemoveWorkerProcessor(JSContext* cx,
+                                        workers::VideoWorkerPrivate& worker,
+                                        JS::Handle<JSObject*> parameters)
+{
+  mStream->RemoveWorkerProcessor(&worker, mTrackID);
+}
+
+} // namespace dom
+} // namespace mozilla

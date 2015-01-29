@@ -9,6 +9,10 @@
 #include "MediaStreamGraph.h"
 #include <algorithm>
 
+BEGIN_WORKERS_NAMESPACE
+class VideoWorkerPrivate;
+END_WORKERS_NAMESPACE
+
 namespace mozilla {
 
 /**
@@ -24,6 +28,22 @@ public:
   // Forward SetTrackEnabled(output_track_id, enabled) to the Source MediaStream,
   // translating the output track ID into the correct ID in the source.
   virtual void ForwardTrackEnabled(TrackID aOutputID, bool aEnabled) override;
+
+  virtual TrackUnionStream* AsTrackUnionStream() override { return this; };
+
+  void AddWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
+                        TrackID aTrackID,
+                        const nsString& aID);
+  void RemoveWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
+                           TrackID aTrackID);
+
+  void
+  AddWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
+                     TrackID aTrackID,
+                     const nsString& aID,
+                     MediaInputPort* aPort);
+  void RemoveWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
+                             TrackID aTrackID);
 
 protected:
   // Only non-ended tracks are allowed to persist in this map.
@@ -48,6 +68,14 @@ protected:
     TrackID mInputTrackID;
     TrackID mOutputTrackID;
     nsAutoPtr<MediaSegment> mSegment;
+    // VideoWorkerList
+    // FIXME: Check VideoWorkerPrivate life cycle later.
+    nsTArray<nsRefPtr<dom::workers::VideoWorkerPrivate>> mVideoWorkerMonitors;
+    nsRefPtr<dom::workers::VideoWorkerPrivate> mVideoWorkerProcessor;
+    nsRefPtr<VideoFrame::Image> mLastImage;
+    nsRefPtr<VideoFrame::Image> mOutputImage;
+    nsString mID;
+    StreamTime mLastOutputTime;
   };
 
   uint32_t AddTrack(MediaInputPort* aPort, StreamBuffer::Track* aTrack,
@@ -58,6 +86,10 @@ protected:
                      bool* aOutputTrackFinished);
 
   nsTArray<TrackMapEntry> mTrackMap;
+private:
+  void DispatchToVideoWorkerMonitor(TrackMapEntry* aMapEntry,
+                                    StreamTime aPlaybackTime,
+                                    const nsString& aID);
 };
 
 }
