@@ -223,6 +223,7 @@
 #include "mozilla/dom/MediaQueryList.h"
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/dom/NavigatorBinding.h"
+#include "mozilla/dom/ImageBitmap.h"
 #ifdef HAVE_SIDEBAR
 #include "mozilla/dom/ExternalBinding.h"
 #endif
@@ -14360,3 +14361,18 @@ nsGlobalWindow::SetReplaceableWindowCoord(JSContext* aCx,
 #ifdef _WINDOWS_
 #error "Never include windows.h in this file!"
 #endif
+
+already_AddRefed<Promise>
+nsGlobalWindow::CreateImageBitmap(const ImageBitmapSource& aImage,
+                                  ErrorResult& aRv)
+{
+  return ImageBitmap::Create(this, aImage, false, gfx::IntRect(), aRv);
+}
+
+already_AddRefed<Promise>
+nsGlobalWindow::CreateImageBitmap(const ImageBitmapSource& aImage,
+                                  int32_t aSx, int32_t aSy, int32_t aSw, int32_t aSh,
+                                  ErrorResult& aRv)
+{
+  return ImageBitmap::Create(this, aImage, true, gfx::IntRect(aSx, aSy, aSw, aSh), aRv);
+}

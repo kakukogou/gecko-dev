@@ -29,6 +29,8 @@ EXPORTS.mozilla.dom += [
     'CanvasPattern.h',
     'CanvasRenderingContext2D.h',
     'CanvasUtils.h',
+    'ImageBitmap.h',
+    'ImageBitmapSource.h',
     'ImageData.h',
     'TextMetrics.h',
 ]
@@ -43,6 +45,7 @@ UNIFIED_SOURCES += [
     'CanvasUtils.cpp',
     'DocumentRendererChild.cpp',
     'DocumentRendererParent.cpp',
+    'ImageBitmap.cpp',
     'ImageData.cpp',
 ]
 
