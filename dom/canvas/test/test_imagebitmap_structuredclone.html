@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+<title>Test ImageBitmap : Structured Clone</title>
+<meta charset="utf-8">
+<script src="/tests/SimpleTest/SimpleTest.js"></script>
+<link rel="stylesheet" href="/tests/SimpleTest/test.css">
+<body>
+<script type="text/javascript">
+
+var gImage;
+
+/**
+ * [isPixel description]
+ * @param  {[type]}  ctx : canvas context
+ * @param  {[type]}  x   : pixel x coordinate
+ * @param  {[type]}  y   : pixel y coordinate
+ * @param  {[type]}  c   : a rgba color code
+ * @param  {[type]}  d   : error duration
+ * @return {Promise}
+ */
+function isPixel(ctx1, ctx2, x, y) {
+  var pixel1 = ctx1.getImageData(x, y, 1, 1);
+  var pixel2 = ctx2.getImageData(x, y, 1, 1);
+  ok(pixel1.data[0] == pixel2.data[0] &&
+     pixel1.data[1] == pixel2.data[1] &&
+     pixel1.data[2] == pixel2.data[2] &&
+     pixel1.data[3] == pixel2.data[3], 
+    "Color(" + pixel1.data[0] + ", " + pixel1.data[0] + ", " + pixel1.data[0] + ", " + pixel1.data[0] + ") should qual to Color(" + pixel2.data[0] + ", " + pixel2.data[0] + ", " + pixel2.data[0] + ", " + pixel2.data[0] +  ")");
+}
+
+var worker = new Worker("test_imagebitmap_structuredclone.js");
+worker.onmessage = function(event) {
+
+  if (event.data.type == "status") {
+    ok(event.data.status, event.data.msg);
+  } else {
+    var bitmap = event.data.bitmap;
+    ok(!!event.data.bitmap, "Get an ImageBitmap form worker.");
+    var bitmap = event.data.bitmap;
+
+    var canvas1 = document.createElement('canvas');
+    var canvas2 = document.createElement('canvas');
+
+    canvas1.width  = gImage.naturalWidth;
+    canvas1.height = gImage.naturalHeight;
+    canvas2.width  = gImage.naturalWidth;
+    canvas2.height = gImage.naturalHeight;
+
+    var ctx1 = canvas1.getContext('2d');
+    var ctx2 = canvas2.getContext('2d');
+
+    ctx1.drawImage(gImage, 0, 0);
+    ctx2.drawImage(bitmap, 0, 0);
+
+    for (var t = 0; t < 20; ++t) {
+      // check one random pixel
+      var randomX = Math.floor(Math.random() * gImage.naturalWidth);
+      var randomY = Math.floor(Math.random() * gImage.naturalHeight);
+      isPixel(ctx1, ctx2, randomX, randomY);
+    }
+
+    SimpleTest.finish();
+  }
+}
+
+function runTests() {
+  ok(worker, "Worker created successfully.");
+
+  // prepare an ImageData object
+  gImage = document.createElement('img');
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var imageData;
+  gImage.src = "image_rgrg-256x256.png";
+  gImage.onload = function() {
+    var promise = createImageBitmap(gImage);
+    promise.then(function(bitmap) {
+      worker.postMessage({"bitmap":bitmap});
+    });
+
+  };
+}
+
+SimpleTest.waitForExplicitFinish();
+addLoadEvent(runTests);
+
+</script>
+</body>
