@@ -121,6 +121,7 @@ ImageBitmap::ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend)
   : mCropRect(0, 0, aBackend->GetSize().width, aBackend->GetSize().height)
   , mBackend(aBackend)
   , mParent(aGlobal)
+  , mSurface(nullptr)
 {
   MOZ_ASSERT(aBackend, "aBackend is null in ImageBitmap constructor.");
 }
@@ -133,6 +134,99 @@ JSObject*
 ImageBitmap::WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto)
 {
   return ImageBitmapBinding::Wrap(aCx, this, aGivenProto);
+}
+
+void
+ImageBitmap::SetCrop(const gfx::IntRect& aRect, ErrorResult& aRv)
+{
+  int32_t width = aRect.Width(), height = aRect.Height(),
+          x = aRect.X(), y = aRect.Y();
+
+  // fix up negative dimensions
+  if (width < 0) {
+    if (width == INT_MIN) {
+      aRv.Throw(NS_ERROR_DOM_INDEX_SIZE_ERR);
+      return;
+    }
+
+    CheckedInt32 checkedX = CheckedInt32(x) + width;
+
+    if (!checkedX.isValid()) {
+      aRv.Throw(NS_ERROR_DOM_INDEX_SIZE_ERR);
+      return;
+    }
+
+    x = checkedX.value();
+    width = -width;
+  }
+
+  if (height < 0) {
+    if (height == INT_MIN) {
+      aRv.Throw(NS_ERROR_DOM_INDEX_SIZE_ERR);
+      return;
+    }
+
+    CheckedInt32 checkedY = CheckedInt32(y) + height;
+
+    if (!checkedY.isValid()) {
+      aRv.Throw(NS_ERROR_DOM_INDEX_SIZE_ERR);
+      return;
+    }
+
+    y = checkedY.value();
+    height = -height;
+  }
+
+  mCropRect = IntRect(x, y, width, height);
+}
+
+TemporaryRef<SourceSurface>
+ImageBitmap::PrepareForDrawTarget(gfx::DrawTarget* aTarget)
+{
+  MOZ_ASSERT(aTarget);
+
+  if (!mSurface) {
+    mSurface = mBackend->GetAsSourceSurface();
+  }
+
+  if (!mSurface) {
+    return nullptr;
+  }
+
+  RefPtr<DrawTarget> target = aTarget;
+  IntRect surfRect(0, 0, mSurface->GetSize().width, mSurface->GetSize().height);
+
+  // Check if we still need to crop our surface
+  if (!mCropRect.IsEqualEdges(surfRect)) {
+
+    IntRect surfPortion = surfRect.Intersect(mCropRect);
+
+    // the crop lies entirely outside the surface area, nothing to draw
+    if (surfPortion.Width() == 0 || surfPortion.Height() == 0) {
+      return mSurface = nullptr;
+    }
+
+    IntPoint dest(std::max(0, surfPortion.X() - mCropRect.X()),
+                  std::max(0, surfPortion.Y() - mCropRect.Y()));
+
+    target = target->CreateSimilarDrawTarget(mCropRect.Size(),
+                                             target->GetFormat());
+    if (!target) {
+      return mSurface = nullptr;
+    }
+
+    // Make mCropRect match new surface we've cropped to
+    mCropRect.MoveTo(0, 0);
+    target->CopySurface(mSurface, surfPortion, dest);
+    mSurface = target->Snapshot();
+  }
+
+  // Replace our surface with one optimized for the target we're about to draw
+  // to, under the assumption it'll likely be drawn again to that target.
+  // This call should be a no-op for already-optimized surfaces
+  mSurface = target->OptimizeSourceSurface(mSurface);
+
+  return mSurface;
 }
 
 /* static */
@@ -268,6 +362,10 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLCanvasElement(), aRv);
   } else {
     aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
+  }
+
+  if (imageBitmap && aCrop) {
+    imageBitmap->SetCrop(aCropRect, aRv);
   }
 
   if (!aRv.Failed()) {

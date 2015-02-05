@@ -57,6 +57,9 @@ public:
     return mCropRect.Height();
   }
 
+  TemporaryRef<gfx::SourceSurface>
+  PrepareForDrawTarget(gfx::DrawTarget* aTarget);
+
   static already_AddRefed<Promise>
   Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
          bool aCrop, const gfx::IntRect& aCropRect, ErrorResult& aRv);
@@ -66,6 +69,8 @@ protected:
   ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend);
 
   virtual ~ImageBitmap();
+
+  void SetCrop(const gfx::IntRect& aRect, ErrorResult& aRv);
 
   template<class HTMLElementType>
   static already_AddRefed<ImageBitmap>
@@ -83,6 +88,7 @@ protected:
   gfx::IntRect mCropRect;
   nsRefPtr<layers::Image> mBackend;
   nsCOMPtr<nsIGlobalObject> mParent;
+  RefPtr<gfx::SourceSurface> mSurface;
 };
 
 } // namespace dom
