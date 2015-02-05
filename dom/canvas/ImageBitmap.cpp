@@ -8,9 +8,11 @@
 #include "mozilla/dom/ImageBitmapBinding.h"
 #include "mozilla/dom/Promise.h"
 #include "mozilla/gfx/2D.h"
+#include "mozilla/layers/ImageBitmapImage.h"
 #include "nsLayoutUtils.h"
 
 using namespace mozilla::gfx;
+using namespace mozilla::layers;
 
 namespace mozilla {
 namespace dom {
@@ -23,9 +25,64 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(ImageBitmap)
   NS_INTERFACE_MAP_ENTRY(nsISupports)
 NS_INTERFACE_MAP_END
 
-ImageBitmap::ImageBitmap(nsIGlobalObject* aGlobal)
-  : mParent(aGlobal)
+static inline already_AddRefed<layers::Image>
+CreateImageFromRawData(gfx::IntSize aSize, uint32_t aStride, gfx::SurfaceFormat aFormat, uint8_t* aBuffer, uint32_t aBufferLength, ErrorResult& aRv)
 {
+  nsRefPtr<ImageContainer> container = LayerManager::CreateImageContainer();
+  nsRefPtr<layers::Image> image = container->CreateImage(ImageFormat::IMAGEBITMAP_BACKEND);
+  if (!image) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  ImageBitmapImage* backend = static_cast<ImageBitmapImage*>(image.get());
+  if (!backend->Init(aSize, aStride, aFormat)) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  if (backend->GetBufferLength() != aBufferLength) {
+    aRv.Throw(NS_ERROR_INVALID_ARG);
+    return nullptr;
+  }
+
+  memcpy(backend->GetBuffer(), aBuffer, backend->GetBufferLength());
+
+  return image.forget();
+}
+
+static inline already_AddRefed<layers::Image>
+CreateImageFromSurface(SourceSurface* aSurface, ErrorResult& aRv)
+{
+  RefPtr<DataSourceSurface> dataSurface = aSurface->GetDataSurface();
+  if (!dataSurface) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  DataSourceSurface::MappedSurface map;
+  if (!dataSurface->Map(DataSourceSurface::MapType::READ, &map)) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return nullptr;
+  }
+
+  uint32_t bufferLength = aSurface->GetSize().height * map.mStride;
+  nsRefPtr<layers::Image> image = CreateImageFromRawData(aSurface->GetSize(), map.mStride, aSurface->GetFormat(), map.mData, bufferLength, aRv);
+  dataSurface->Unmap();
+
+  if (aRv.Failed()) {
+    return nullptr;
+  }
+
+  return image.forget();
+}
+
+ImageBitmap::ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend)
+  : mCropRect(0, 0, aBackend->GetSize().width, aBackend->GetSize().height)
+  , mBackend(aBackend)
+  , mParent(aGlobal)
+{
+  MOZ_ASSERT(aBackend, "aBackend is null in ImageBitmap constructor.");
 }
 
 ImageBitmap::~ImageBitmap()
@@ -38,6 +95,94 @@ ImageBitmap::WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto)
   return ImageBitmapBinding::Wrap(aCx, this, aGivenProto);
 }
 
+/* static */
+template<class HTMLElementType>
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateFromElement(nsIGlobalObject* aGlobal, HTMLElementType& aElement, ErrorResult& aRv)
+{
+  nsLayoutUtils::SurfaceFromElementResult res =
+    nsLayoutUtils::SurfaceFromElement(&aElement, nsLayoutUtils::SFE_WANT_FIRST_FRAME);
+
+  if (!res.mSourceSurface) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  nsRefPtr<layers::Image> backend = CreateImageFromSurface(res.mSourceSurface, aRv);
+  if (aRv.Failed()) {
+    return nullptr;
+  }
+
+  nsRefPtr<ImageBitmap> ret = new ImageBitmap(aGlobal, backend);
+  return ret.forget();
+}
+
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLImageElement& aImageEl, ErrorResult& aRv)
+{
+  if (!aImageEl.Complete()) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
+
+  // TODO: check origin-clean
+  // TODO: check for non-bitmap images
+
+  return CreateFromElement(aGlobal, aImageEl, aRv);
+}
+
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLVideoElement& aVideoEl, ErrorResult& aRv)
+{
+  // TODO: check network state
+  // TODO: check origin
+  // TODO: check ready state
+
+  return CreateFromElement(aGlobal, aVideoEl, aRv);
+}
+
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLCanvasElement& aCanvasEl, ErrorResult& aRv)
+{
+  // TODO: check origin-clean
+
+  if (aCanvasEl.Width() == 0 || aCanvasEl.Height() == 0) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
+
+  return CreateFromElement(aGlobal, aCanvasEl, aRv);
+}
+
+static void
+FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
+{
+  MOZ_ASSERT(aPromise);
+  aPromise->MaybeResolve(aImageBitmap);
+}
+
+class FulfillImageBitmapPromiseTask : public nsRunnable
+{
+public:
+  FulfillImageBitmapPromiseTask(Promise* aPromise, ImageBitmap* aImageBitmap)
+    : mPromise(aPromise)
+    , mImageBitmap(aImageBitmap)
+  {
+  }
+
+  NS_IMETHOD Run()
+  {
+    FulfillImageBitmapPromise(mPromise, mImageBitmap);
+    return NS_OK;
+  }
+
+private:
+  nsRefPtr<Promise> mPromise;
+  nsRefPtr<ImageBitmap> mImageBitmap;
+};
 
 /* static */
 already_AddRefed<Promise>
@@ -57,7 +202,27 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
     return promise.forget();
   }
 
-  aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
+  nsRefPtr<ImageBitmap> imageBitmap;
+
+  if (aSrc.IsHTMLImageElement()) {
+    MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from HTMLImageElement off the main thread.");
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLImageElement(), aRv);
+  } else if (aSrc.IsHTMLVideoElement()) {
+    MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from HTMLImageElement off the main thread.");
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLVideoElement(), aRv);
+  } else if (aSrc.IsHTMLCanvasElement()) {
+    MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from HTMLImageElement off the main thread.");
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLCanvasElement(), aRv);
+  } else {
+    aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
+  }
+
+  if (!aRv.Failed()) {
+    nsCOMPtr<nsIRunnable> runnable =
+      new FulfillImageBitmapPromiseTask(promise, imageBitmap);
+    NS_DispatchToCurrentThread(runnable);
+  }
+
   return promise.forget();
 }
 
