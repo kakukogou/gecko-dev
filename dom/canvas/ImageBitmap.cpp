@@ -340,6 +340,39 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, ImageData& aImageData, Err
   return ret.forget();
 }
 
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, CanvasRenderingContext2D& aCanvasCtx, ErrorResult& aRv)
+{
+  // check origin-clean
+  if (aCanvasCtx.GetCanvas()->IsWriteOnly()) {
+    aRv.Throw(NS_ERROR_DOM_SECURITY_ERR);
+    return nullptr;
+  }
+
+  RefPtr<SourceSurface> surface = aCanvasCtx.GetSurfaceSnapshot();
+
+  if (!surface) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  const IntSize surfaceSize = surface->GetSize();
+  if (surfaceSize.width == 0 || surfaceSize.height == 0) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
+
+  nsRefPtr<layers::Image> backend = CreateImageFromSurface(surface, aRv);
+
+  if (aRv.Failed()) {
+    return nullptr;
+  }
+
+  nsRefPtr<ImageBitmap> ret = new ImageBitmap(aGlobal, backend);
+  return ret.forget();
+}
+
 static void
 FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
 {
@@ -398,6 +431,9 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLCanvasElement(), aRv);
   } else if (aSrc.IsImageData()) {
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsImageData(), aRv);
+  } else if (aSrc.IsCanvasRenderingContext2D()) {
+    MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from CanvasRenderingContext2D off the main thread.");
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsCanvasRenderingContext2D(), aRv);
   } else {
     aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
   }
