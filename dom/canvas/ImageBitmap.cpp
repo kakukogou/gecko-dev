@@ -373,6 +373,22 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, CanvasRenderingContext2D& 
   return ret.forget();
 }
 
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, ImageBitmap& aImageBitmap, ErrorResult& aRv)
+{
+  ImageBitmapImage* srcBackend = static_cast<ImageBitmapImage*>(aImageBitmap.mBackend.get());
+
+  if (!srcBackend) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  nsRefPtr<layers::Image> backend = srcBackend->Clone();
+  nsRefPtr<ImageBitmap> ret = new ImageBitmap(aGlobal, backend);
+  return ret.forget();
+}
+
 static void
 FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
 {
@@ -434,6 +450,8 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
   } else if (aSrc.IsCanvasRenderingContext2D()) {
     MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from CanvasRenderingContext2D off the main thread.");
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsCanvasRenderingContext2D(), aRv);
+  } else if (aSrc.IsImageBitmap()) {
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsImageBitmap(), aRv);
   } else {
     aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
   }
