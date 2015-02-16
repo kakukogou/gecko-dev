@@ -77,6 +77,46 @@ CreateImageFromSurface(SourceSurface* aSurface, ErrorResult& aRv)
   return image.forget();
 }
 
+static inline bool
+CheckSecurityForHTMLElements(const nsLayoutUtils::SurfaceFromElementResult& aRes)
+{
+  if (aRes.mIsWriteOnly) {
+    return false;
+  }
+
+  if (!aRes.mCORSUsed) {
+    nsIGlobalObject* incumbentSettingsObject = GetIncumbentGlobal();
+    if (!incumbentSettingsObject) {
+      return false;
+    }
+
+    nsIPrincipal* principal = incumbentSettingsObject->PrincipalOrNull();
+    if (!principal || !(principal->Subsumes(aRes.mPrincipal))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static inline bool
+CheckNonBitmapSource(HTMLImageElement& aImageEl)
+{
+  nsresult rv;
+
+  nsCOMPtr<imgIRequest> imgRequest;
+  rv = aImageEl.GetRequest(nsIImageLoadingContent::CURRENT_REQUEST, getter_AddRefs(imgRequest));
+  if (NS_SUCCEEDED(rv) && imgRequest) {
+    nsCOMPtr<imgIContainer> imgContainer;
+    rv = imgRequest->GetImage(getter_AddRefs(imgContainer));
+    if (NS_SUCCEEDED(rv) && imgContainer && imgContainer->GetType() == imgIContainer::TYPE_RASTER) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 ImageBitmap::ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend)
   : mCropRect(0, 0, aBackend->GetSize().width, aBackend->GetSize().height)
   , mBackend(aBackend)
@@ -103,6 +143,12 @@ ImageBitmap::CreateFromElement(nsIGlobalObject* aGlobal, HTMLElementType& aEleme
   nsLayoutUtils::SurfaceFromElementResult res =
     nsLayoutUtils::SurfaceFromElement(&aElement, nsLayoutUtils::SFE_WANT_FIRST_FRAME);
 
+  // check origin-clean
+  if (!CheckSecurityForHTMLElements(res)) {
+    aRv.Throw(NS_ERROR_DOM_SECURITY_ERR);
+    return nullptr;
+  }
+
   if (!res.mSourceSurface) {
     aRv.Throw(NS_ERROR_NOT_AVAILABLE);
     return nullptr;
@@ -126,8 +172,10 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLImageElement& aImageEl
     return nullptr;
   }
 
-  // TODO: check origin-clean
-  // TODO: check for non-bitmap images
+  if (!CheckNonBitmapSource(aImageEl)) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
 
   return CreateFromElement(aGlobal, aImageEl, aRv);
 }
@@ -136,9 +184,16 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLImageElement& aImageEl
 already_AddRefed<ImageBitmap>
 ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLVideoElement& aVideoEl, ErrorResult& aRv)
 {
-  // TODO: check network state
-  // TODO: check origin
-  // TODO: check ready state
+  if (aVideoEl.NetworkState() == HTMLMediaElement::NETWORK_EMPTY) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
+
+  if (aVideoEl.ReadyState() == HTMLMediaElement::HAVE_NOTHING ||
+      aVideoEl.ReadyState() == HTMLMediaElement::HAVE_METADATA) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
 
   return CreateFromElement(aGlobal, aVideoEl, aRv);
 }
@@ -147,8 +202,6 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLVideoElement& aVideoEl
 already_AddRefed<ImageBitmap>
 ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLCanvasElement& aCanvasEl, ErrorResult& aRv)
 {
-  // TODO: check origin-clean
-
   if (aCanvasEl.Width() == 0 || aCanvasEl.Height() == 0) {
     aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
     return nullptr;
