@@ -20,6 +20,7 @@ class ErrorResult;
 
 namespace gfx {
 class SourceSurface;
+enum class SurfaceFormat : int8_t;
 }
 
 namespace layers {
@@ -35,6 +36,9 @@ class HTMLImageElement;
 class HTMLVideoElement;
 class ImageData;
 class Promise;
+class CreateImageBitmapFromBlob;
+class CreateImageBitmapFromBlobTask;
+class CreateImageBitmapFromBlobWorkerTask;
 
 class ImageBitmap final : public nsISupports,
                           public nsWrapperCache
@@ -63,6 +67,10 @@ public:
   static already_AddRefed<Promise>
   Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
          bool aCrop, const gfx::IntRect& aCropRect, ErrorResult& aRv);
+
+  friend CreateImageBitmapFromBlob;
+  friend CreateImageBitmapFromBlobTask;
+  friend CreateImageBitmapFromBlobWorkerTask;
 
 protected:
 

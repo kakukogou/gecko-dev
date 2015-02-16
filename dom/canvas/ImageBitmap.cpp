@@ -7,15 +7,20 @@
 #include "mozilla/dom/ImageBitmap.h"
 #include "mozilla/dom/ImageBitmapBinding.h"
 #include "mozilla/dom/Promise.h"
+#include "mozilla/dom/WorkerPrivate.h"
+#include "mozilla/dom/WorkerRunnable.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/layers/ImageBitmapImage.h"
 #include "nsLayoutUtils.h"
+#include "imgTools.h"
 
 using namespace mozilla::gfx;
 using namespace mozilla::layers;
 
 namespace mozilla {
 namespace dom {
+
+using namespace workers;
 
 NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(ImageBitmap, mParent)
 NS_IMPL_CYCLE_COLLECTING_ADDREF(ImageBitmap)
@@ -389,32 +394,309 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, ImageBitmap& aImageBitmap,
   return ret.forget();
 }
 
-static void
-FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
+class FulfillImageBitmapPromise
 {
-  MOZ_ASSERT(aPromise);
-  aPromise->MaybeResolve(aImageBitmap);
-}
-
-class FulfillImageBitmapPromiseTask : public nsRunnable
-{
-public:
-  FulfillImageBitmapPromiseTask(Promise* aPromise, ImageBitmap* aImageBitmap)
-    : mPromise(aPromise)
-    , mImageBitmap(aImageBitmap)
+protected:
+  FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
+  : mPromise(aPromise)
+  , mImageBitmap(aImageBitmap)
   {
+    MOZ_ASSERT(aPromise);
   }
 
-  NS_IMETHOD Run()
+  void DoFulfillImageBitmapPromise()
   {
-    FulfillImageBitmapPromise(mPromise, mImageBitmap);
-    return NS_OK;
+    mPromise->MaybeResolve(mImageBitmap);
   }
 
 private:
   nsRefPtr<Promise> mPromise;
   nsRefPtr<ImageBitmap> mImageBitmap;
 };
+
+class FulfillImageBitmapPromiseTask final : public nsRunnable,
+                                            public FulfillImageBitmapPromise
+{
+public:
+  FulfillImageBitmapPromiseTask(Promise* aPromise, ImageBitmap* aImageBitmap)
+  : FulfillImageBitmapPromise(aPromise, aImageBitmap)
+  {
+  }
+
+  NS_IMETHOD Run() override
+  {
+    DoFulfillImageBitmapPromise();
+    return NS_OK;
+  }
+};
+
+class FulfillImageBitmapPromiseWorkerTask final : public WorkerSameThreadRunnable,
+                                                  public FulfillImageBitmapPromise
+{
+public:
+  FulfillImageBitmapPromiseWorkerTask(Promise* aPromise, ImageBitmap* aImageBitmap)
+  : WorkerSameThreadRunnable(GetCurrentThreadWorkerPrivate()),
+    FulfillImageBitmapPromise(aPromise, aImageBitmap)
+  {
+  }
+
+  bool WorkerRun(JSContext* aCx, WorkerPrivate* aWorkerPrivate) override
+  {
+    DoFulfillImageBitmapPromise();
+    return true;
+  }
+};
+
+static inline void
+AsyncFulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
+{
+  if (NS_IsMainThread()) {
+    nsCOMPtr<nsIRunnable> task =
+      new FulfillImageBitmapPromiseTask(aPromise, aImageBitmap);
+    NS_DispatchToCurrentThread(task); // Actually, to the main-thread.
+  } else {
+    nsRefPtr<FulfillImageBitmapPromiseWorkerTask> task =
+      new FulfillImageBitmapPromiseWorkerTask(aPromise, aImageBitmap);
+    task->Dispatch(GetCurrentThreadWorkerPrivate()->GetJSContext()); // Actually, to the current worker-thread.
+  }
+}
+
+static inline TemporaryRef<SourceSurface>
+DecodeBlob(Blob& aBlob, ErrorResult& aRv)
+{
+  // get the internal stream of the blob
+  nsCOMPtr<nsIInputStream> stream;
+  nsresult rv = aBlob.Impl()->GetInternalStream(getter_AddRefs(stream));
+  if (NS_FAILED(rv)) {
+    aRv.Throw(rv);
+    return nullptr;
+  }
+
+  // get the MIME type string of the blob
+  // the type will be checked in the DecodeImage() method.
+  nsAutoString mimeTypeUTF16;
+  aBlob.GetType(mimeTypeUTF16);
+
+  // get the Component object;
+  nsCOMPtr<imgITools> imgtool = do_GetService(NS_IMGTOOLS_CID);
+  if (!imgtool) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  // decode image
+  NS_ConvertUTF16toUTF8 mimeTypeUTF8(mimeTypeUTF16); // NS_ConvertUTF16toUTF8 ---|> nsAutoCString
+  nsCOMPtr<imgIContainer> imgContainer;
+  rv = imgtool->DecodeImage(stream, mimeTypeUTF8, getter_AddRefs(imgContainer));
+  if (NS_FAILED(rv)) {
+    aRv.Throw(rv);
+    return nullptr;
+  }
+
+  // get the surface out
+  uint32_t frameFlags = imgIContainer::FLAG_SYNC_DECODE | imgIContainer::FLAG_WANT_DATA_SURFACE;
+  uint32_t whichFrame = imgIContainer::FRAME_FIRST;
+  RefPtr<SourceSurface> surface = imgContainer->GetFrame(whichFrame, frameFlags);
+
+  if (!surface) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  return surface.forget();
+}
+
+class CreateImageBitmapFromBlob
+{
+protected:
+  CreateImageBitmapFromBlob(Promise* aPromise,
+                            nsIGlobalObject* aGlobal,
+                            Blob& aBlob,
+                            bool aCrop,
+                            const IntRect& aCropRect)
+  : mPromise(aPromise),
+    mGlobalObject(aGlobal),
+    mBlob(&aBlob),
+    mCrop(aCrop),
+    mCropRect(aCropRect)
+  {
+  }
+
+  virtual ~CreateImageBitmapFromBlob()
+  {
+  }
+
+  void DoCreateImageBitmapFromBlob(ErrorResult& aRv)
+  {
+    nsRefPtr<ImageBitmap> imageBitmap = CreateImageBitmap(aRv);
+
+    // handle errors while creating ImageBitmap
+    // (1) error occurs during reading of the object
+    // (2) the image data is not in a supported file format
+    // (3) the image data is corrupted
+    // All these three cases should reject promise with null value
+    if (aRv.Failed()) {
+      mPromise->MaybeReject(aRv);
+      return;
+    }
+
+    if (imageBitmap && mCrop) {
+      imageBitmap->SetCrop(mCropRect, aRv);
+
+      if (aRv.Failed()) {
+        mPromise->MaybeReject(aRv);
+        return;
+      }
+    }
+
+    mPromise->MaybeResolve(imageBitmap);
+    return;
+  }
+
+  virtual already_AddRefed<ImageBitmap> CreateImageBitmap(ErrorResult& aRv) = 0;
+
+  nsRefPtr<Promise> mPromise;
+  nsCOMPtr<nsIGlobalObject> mGlobalObject;
+  RefPtr<mozilla::dom::Blob> mBlob;
+  bool mCrop;
+  IntRect mCropRect;
+};
+
+class CreateImageBitmapFromBlobTask final : public nsRunnable,
+                                            public CreateImageBitmapFromBlob
+{
+public:
+  CreateImageBitmapFromBlobTask(Promise* aPromise,
+                                nsIGlobalObject* aGlobal,
+                                Blob& aBlob,
+                                bool aCrop, IntRect const &aCropRect)
+  :CreateImageBitmapFromBlob(aPromise, aGlobal, aBlob, aCrop, aCropRect)
+  {
+  }
+
+  NS_IMETHOD Run() override
+  {
+    ErrorResult error;
+    DoCreateImageBitmapFromBlob(error);
+    return NS_OK;
+  }
+
+private:
+  already_AddRefed<ImageBitmap> CreateImageBitmap(ErrorResult& aRv) override
+  {
+    RefPtr<SourceSurface> surface = DecodeBlob(*mBlob, aRv);
+
+    if (aRv.Failed()) {
+      return nullptr;
+    }
+
+    nsRefPtr<layers::Image> backend = CreateImageFromSurface(surface, aRv);
+
+    if (aRv.Failed()) {
+      return nullptr;
+    }
+
+    // create ImageBitmap object
+    nsRefPtr<ImageBitmap> imageBitmap = new ImageBitmap(mGlobalObject, backend);
+    return imageBitmap.forget();
+  }
+};
+
+class CreateImageBitmapFromBlobWorkerTask final : public WorkerSameThreadRunnable,
+                                                  public CreateImageBitmapFromBlob
+{
+  // This is a synchronous task.
+  class DecodeBlobInMainThreadSyncTask final : public WorkerMainThreadRunnable
+  {
+  public:
+    DecodeBlobInMainThreadSyncTask(WorkerPrivate* aWorkerPrivate,
+                                   Blob* aBlob,
+                                   ErrorResult* aError,
+                                   layers::Image** aImage)
+    : WorkerMainThreadRunnable(aWorkerPrivate)
+    , mBlob(aBlob)
+    , mError(aError)
+    , mImage(aImage)
+    {
+    }
+
+    bool MainThreadRun() override
+    {
+      // Decode the blob into a SourceSurface
+      RefPtr<SourceSurface> surface = DecodeBlob(*mBlob, *mError);
+
+      if (mError->Failed()) {
+        return false;
+      }
+
+      nsRefPtr<layers::Image> image = CreateImageFromSurface(surface, *mError);
+      if (mError->Failed()) {
+        return false;
+      }
+
+      image.forget(mImage);
+
+      return true;
+    }
+
+  private:
+    Blob* mBlob;
+    ErrorResult* mError;
+    layers::Image** mImage;
+  };
+
+public:
+  CreateImageBitmapFromBlobWorkerTask(Promise* aPromise,
+                                  nsIGlobalObject* aGlobal,
+                                  mozilla::dom::Blob& aBlob,
+                                  bool aCrop, IntRect const &aCropRect)
+  : WorkerSameThreadRunnable(GetCurrentThreadWorkerPrivate()),
+    CreateImageBitmapFromBlob(aPromise, aGlobal, aBlob, aCrop, aCropRect)
+  {
+  }
+
+  bool WorkerRun(JSContext* aCx, WorkerPrivate* aWorkerPrivate) override
+  {
+    ErrorResult error;
+    DoCreateImageBitmapFromBlob(error);
+    return !(error.Failed());
+  }
+
+private:
+  already_AddRefed<ImageBitmap> CreateImageBitmap(ErrorResult& aRv) override
+  {
+    nsRefPtr<layers::Image> backend;
+
+    nsRefPtr<DecodeBlobInMainThreadSyncTask> task =
+      new DecodeBlobInMainThreadSyncTask(mWorkerPrivate, mBlob, &aRv, getter_AddRefs(backend));
+    task->Dispatch(mWorkerPrivate->GetJSContext()); // This is a synchronous call.
+
+    if (aRv.Failed()) {
+      mPromise->MaybeReject(aRv);
+      return nullptr;
+    }
+
+    // create ImageBitmap object
+    nsRefPtr<ImageBitmap> imageBitmap = new ImageBitmap(mGlobalObject, backend);
+    return imageBitmap.forget();
+  }
+
+};
+
+static inline void
+AsyncCreateImageBitmapFromBlob(Promise* aPromise, nsIGlobalObject* aGlobal,
+                               Blob& aBlob, bool aCrop, IntRect const &aCropRect)
+{
+  if (NS_IsMainThread()) {
+    nsCOMPtr<nsIRunnable> task =
+      new CreateImageBitmapFromBlobTask(aPromise, aGlobal, aBlob, aCrop, aCropRect);
+    NS_DispatchToCurrentThread(task); // Actually, to the main-thread.
+  } else {
+    nsRefPtr<CreateImageBitmapFromBlobWorkerTask> task =
+      new CreateImageBitmapFromBlobWorkerTask(aPromise, aGlobal, aBlob, aCrop, aCropRect);
+    task->Dispatch(GetCurrentThreadWorkerPrivate()->GetJSContext()); // Actually, to the current worker-thread.
+  }
+}
 
 /* static */
 already_AddRefed<Promise>
@@ -452,6 +734,9 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsCanvasRenderingContext2D(), aRv);
   } else if (aSrc.IsImageBitmap()) {
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsImageBitmap(), aRv);
+  } else if (aSrc.IsBlob()) {
+    AsyncCreateImageBitmapFromBlob(promise, aGlobal, aSrc.GetAsBlob(), aCrop, aCropRect);
+    return promise.forget();
   } else {
     aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
   }
@@ -461,9 +746,7 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
   }
 
   if (!aRv.Failed()) {
-    nsCOMPtr<nsIRunnable> runnable =
-      new FulfillImageBitmapPromiseTask(promise, imageBitmap);
-    NS_DispatchToCurrentThread(runnable);
+    AsyncFulfillImageBitmapPromise(promise, imageBitmap);
   }
 
   return promise.forget();
