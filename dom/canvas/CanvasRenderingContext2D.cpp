@@ -2170,10 +2170,14 @@ CanvasRenderingContext2D::CreatePattern(const CanvasImageSource& source,
   } else {
     // Special case for ImageBitmap
     ImageBitmap& imgBitmap = source.GetAsImageBitmap();
+    EnsureTarget();
     RefPtr<SourceSurface> srcSurf = imgBitmap.PrepareForDrawTarget(mTarget);
 
+    // An ImageBitmap never taints others so we set principalForSecurityCheck to
+    // nullptr and set CORSUsed to true for passing the security check in
+    // CanvasUtils::DoDrawImageSecurityCheck().
     nsRefPtr<CanvasPattern> pat =
-      new CanvasPattern(this, srcSurf, repeatMode, nullptr, false, false);
+      new CanvasPattern(this, srcSurf, repeatMode, nullptr, false, true);
 
     return pat.forget();
   }
