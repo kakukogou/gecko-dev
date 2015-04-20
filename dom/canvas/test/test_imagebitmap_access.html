@@ -1,0 +1,252 @@
+<!DOCTYPE HTML>
+<title>Canvas Tests</title>
+<meta charset="utf-8">
+<script src="/tests/SimpleTest/SimpleTest.js"></script>
+<link rel="stylesheet" href="/tests/SimpleTest/test.css">
+<body>
+<script type="text/javascript">
+
+SimpleTest.waitForExplicitFinish();
+
+/**
+ * [isPixel description]
+ * @param  {[type]}  imageData  : an imageData
+ * @param  {[type]}  x      : pixel x coordinate
+ * @param  {[type]}  y      : pixel y coordinate
+ * @param  {[type]}  c      : a rgba color code
+ * @param  {[type]}  d      : error duration
+ * @return {Promise}
+ */
+function isPixel(bitmapFormat, imageData, bitmapImageData, x, y, tolerance) {
+  if (imageData.width != bitmapImageData.width ||
+    imageData.height != bitmapImageData.height) {
+    ok(false, "Wrong dimension");
+  }
+
+  var index = 4 * (y * imageData.width + x);
+
+  var pr = imageData.data[index+0],
+      pg = imageData.data[index+1],
+      pb = imageData.data[index+2],
+      pa = imageData.data[index+3];
+
+  if (bitmapFormat == "RGBA32" || bitmapFormat == "RGBX32") {
+    var bpr = bitmapImageData.data[index+0],
+        bpg = bitmapImageData.data[index+1],
+        bpb = bitmapImageData.data[index+2],
+        bpa = bitmapImageData.data[index+3];
+  }
+  else if (bitmapFormat == "BGRA32" || bitmapFormat == "BGRX32") {
+    var bpb = bitmapImageData.data[index+0],
+        bpg = bitmapImageData.data[index+1],
+        bpr = bitmapImageData.data[index+2],
+        bpa = bitmapImageData.data[index+3];
+  }
+  else {
+    // format might be one of the followings: "R5G6B5", "A8", "YUV", ""
+    ok(false, "Not supported ImageFormat: " + bitmapFormat);
+  }
+
+  ok(pr - tolerance <= bpr && bpr <= pr + tolerance &&
+     pg - tolerance <= bpg && bpg <= pg + tolerance &&
+     pb - tolerance <= bpb && bpb <= pb + tolerance &&
+     pa - tolerance <= bpa && bpa <= pa + tolerance,
+     "pixel[" + x + "][" + y + "]: " + "video is "+pr+","+pg+","+pb+","+pa+"; imagebitmap is "+ bpr + "," + bpg + "," + bpb + "," + bpa);
+}
+
+function testImageSource() {
+  var image = document.createElement('img');
+  image.src = "image_rgrg-256x256.png";
+  image.onload = function() {
+    var promise = createImageBitmap(image);
+    promise.then(function(bitmap) {
+      var bitmapFormat = bitmap.findOptimalFormat();
+      ok(bitmapFormat == "BGRA32", "imagebitmap from HTMLImageElement has type BGRA32");
+
+      // Query the buffer length given that data is in "BGRA32" color format
+      // So, the buffer length should be at least (bitmap.width * bitmap.height * 4) bytes
+      // Since there might be paddings, so we can only know the minimal length.
+      var bitmapBufferLength = bitmap.mappedDataLength(bitmapFormat);
+      var minLength = bitmap.width * bitmap.height * 4;
+      ok(bitmapBufferLength >= minLength, "imagebitmap from HTMLImageElement has bufferLength at least (bitmap.width * bitmap.height * 4) long");
+
+      //
+      var bitmapBuffer = new ArrayBuffer(bitmapBufferLength);
+      var bitmapBufferView = new Uint8ClampedArray(bitmapBuffer, 0, bitmapBufferLength);
+      var bitmapImageData = new ImageData(bitmapBufferView, bitmap.width, bitmap.height);
+      var bitmapPixelLayout = bitmap.mapDataInto(bitmapFormat, bitmapBuffer, 0, bitmapBufferLength);
+      var canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      document.body.appendChild(canvas);
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      for (var t = 0; t < 20; ++t) {
+        // check one random pixel
+        var randomX = Math.floor(Math.random() * imageData.width);
+        var randomY = Math.floor(Math.random() * imageData.height);
+        isPixel(bitmapFormat, imageData, bitmapImageData, randomX, randomY, 1);
+        // isPixel_byPixelLayout(imageData, randomX, randomY);
+      }
+    });
+  }
+}
+
+function testVideoSource() {
+  var video = document.createElement('video');
+  var canvas = document.createElement('canvas');
+  var ctx;
+  var isContinue = false;
+  var index = 0;
+
+  var bitmapBufferLength = 0;
+  var bitmapBuffer;
+  var bitmapBufferView;
+  var bitmapImageData;
+  var bitmapFormat = "";
+  var bitmapPixelLayout;
+
+  // assign the source
+  video.crossOrigin = "anonymous"
+  video.src = "http://example.com/tests/dom/canvas/test/crossorigin/video.sjs?name=tests/dom/media/test/320x240.ogv&type=video/ogg&cors=anonymous";
+  video.play();
+
+  // only be called once
+  video.addEventListener("loadeddata", function() {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx = canvas.getContext('2d');
+    document.body.appendChild(canvas);
+
+    isContinue = true;
+    requestAnimationFrame(processOneFrame);
+  });
+
+  video.addEventListener("ended", function() {
+    isContinue = false;
+  });
+
+  function clamp(n,low,high){
+      if(n<low){return(low);}
+      if(n>high){return(high);}
+      return n;
+  }
+
+  function processOneFrame() {
+    var promise = createImageBitmap(video);
+    ctx.drawImage(video, 0, 0);
+    promise.then(function(bitmap) {
+      bitmapFormat = bitmap.findOptimalFormat();
+      console.log("bitmapFormat = " + bitmapFormat);
+
+      var length = bitmap.mappedDataLength(bitmapFormat);
+      console.log("length = " + length);
+
+
+      if (length != bitmapBufferLength) {
+        bitmapBufferLength = length;
+        bitmapBuffer = new ArrayBuffer(bitmapBufferLength);
+        bitmapBufferView = new Uint8ClampedArray(bitmapBuffer, 0, bitmapBufferLength);
+      }
+      bitmapPixelLayout = bitmap.mapDataInto(bitmapFormat, bitmapBuffer, 0, bitmapBufferLength);
+
+      // convert to RGBA
+      // hard code for YUV420P
+      // console.log("bitmapPixelLayout.channels[0].width = " + bitmapPixelLayout.channels[0].width);
+      // console.log("bitmapPixelLayout.channels[0].height = " + bitmapPixelLayout.channels[0].height);
+      // console.log("bitmapPixelLayout.channels[0].offset = " + bitmapPixelLayout.channels[0].offset);
+      // console.log("bitmapPixelLayout.channels[0].stride = " + bitmapPixelLayout.channels[0].stride);
+      // console.log("bitmapPixelLayout.channels[0].skip = " + bitmapPixelLayout.channels[0].skip);
+      // console.log("bitmapPixelLayout.channels[1].width = " + bitmapPixelLayout.channels[1].width);
+      // console.log("bitmapPixelLayout.channels[1].height = " + bitmapPixelLayout.channels[1].height);
+      // console.log("bitmapPixelLayout.channels[1].offset = " + bitmapPixelLayout.channels[1].offset);
+      // console.log("bitmapPixelLayout.channels[1].stride = " + bitmapPixelLayout.channels[1].stride);
+      // console.log("bitmapPixelLayout.channels[1].skip = " + bitmapPixelLayout.channels[1].skip);
+      // console.log("bitmapPixelLayout.channels[2].width = " + bitmapPixelLayout.channels[2].width);
+      // console.log("bitmapPixelLayout.channels[2].height = " + bitmapPixelLayout.channels[2].height);
+      // console.log("bitmapPixelLayout.channels[2].offset = " + bitmapPixelLayout.channels[2].offset);
+      // console.log("bitmapPixelLayout.channels[2].stride = " + bitmapPixelLayout.channels[2].stride);
+      // console.log("bitmapPixelLayout.channels[2].skip = " + bitmapPixelLayout.channels[2].skip);
+
+      var ywidth = bitmapPixelLayout.channels[0].width;
+      var yheight = bitmapPixelLayout.channels[0].height;
+      var yoffset = bitmapPixelLayout.channels[0].offset;
+      var ystride = bitmapPixelLayout.channels[0].stride;
+      var yskip = bitmapPixelLayout.channels[0].skip;
+      var uwidth = bitmapPixelLayout.channels[1].width;
+      var uheight = bitmapPixelLayout.channels[1].height;
+      var uoffset = bitmapPixelLayout.channels[1].offset;
+      var ustride = bitmapPixelLayout.channels[1].stride;
+      var uskip = bitmapPixelLayout.channels[1].skip;
+      var vwidth = bitmapPixelLayout.channels[2].width;
+      var vheight = bitmapPixelLayout.channels[2].height;
+      var voffset = bitmapPixelLayout.channels[2].offset;
+      var vstride = bitmapPixelLayout.channels[2].stride;
+      var vskip = bitmapPixelLayout.channels[2].skip;
+
+      var rgbaBufferLength = ywidth * yheight * 4;
+      var rgbaBuffer = new ArrayBuffer(rgbaBufferLength);
+      var rgbaBufferView = new Uint8ClampedArray(rgbaBuffer, 0, rgbaBufferLength);
+
+      for (var i = 0; i < yheight; ++i) {
+        for (var j = 0; j < ywidth; ++j) {
+          var index = ywidth * i + j;
+          var halfi = parseInt(Math.floor(i/2));
+          var halfj = parseInt(Math.floor(j/2));
+          var y = parseFloat(bitmapBufferView[yoffset + index]);
+          var u = parseFloat(bitmapBufferView[uoffset + uwidth * halfi + halfj]);
+          var v = parseFloat(bitmapBufferView[voffset + vwidth * halfi + halfj]);
+
+          var r = clamp(Math.floor(y + 1.4075 * (v - 128.0)), 0, 255);
+          var g = clamp(Math.floor(y - 0.3455 * (u - 128.0) - (0.7169 * (v - 128.0))), 0, 255);
+          var b = clamp(Math.floor(y + 1.7790 * (u - 128.0)), 0, 255);
+
+          // console.log("y = " + y + ", u = " + u + ", v = " + v);
+          // console.log("r = " + r + ", g = " + g + ", b = " + b);
+
+          rgbaBufferView[index * 4 + 0] = r;
+          rgbaBufferView[index * 4 + 1] = g;
+          rgbaBufferView[index * 4 + 2] = b;
+          rgbaBufferView[index * 4 + 3] = 255;
+        }
+      }
+
+      // prepare
+      bitmapImageData = new ImageData(rgbaBufferView, bitmap.width, bitmap.height);
+
+      // // debug show
+      // var canvas2 = document.createElement('canvas');
+      // canvas2.width = bitmap.width;
+      // canvas2.height = bitmap.height;
+      // var ctx2 = canvas2.getContext('2d');
+      // ctx2.putImageData(bitmapImageData, 0, 0);
+      // document.body.appendChild(canvas2);
+
+      // prepare for testing
+      var imageData = ctx.getImageData(0, 0, video.videoWidth, video.videoHeight);
+
+      for (var t = 0; t < 20; ++t) {
+        // check one random pixel
+        var randomX = Math.floor(Math.random() * imageData.width);
+        var randomY = Math.floor(Math.random() * imageData.height);
+        isPixel("RGBA32", imageData, bitmapImageData, randomX, randomY, 10);
+        // isPixel_byPixelLayout(imageData, randomX, randomY);
+      }
+
+      if (isContinue) { requestAnimationFrame(processOneFrame); }
+      else { SimpleTest.finish(); }
+    });
+  }
+}
+
+function runTests() {
+  testImageSource();
+  testVideoSource();
+}
+
+addLoadEvent(runTests);
+
+</script>
+</body>
