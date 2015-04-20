@@ -29,6 +29,8 @@ EXPORTS.mozilla.dom += [
     'CanvasPattern.h',
     'CanvasRenderingContext2D.h',
     'CanvasUtils.h',
+    'ChannelPixelLayout.h',
+    'ColorFormatPixelLayout.h',
     'ImageBitmap.h',
     'ImageBitmapSource.h',
     'ImageData.h',
@@ -43,9 +45,12 @@ UNIFIED_SOURCES += [
     'CanvasImageCache.cpp',
     'CanvasRenderingContext2D.cpp',
     'CanvasUtils.cpp',
+    'ChannelPixelLayout.cpp',
+    'ColorFormatPixelLayout.cpp',
     'DocumentRendererChild.cpp',
     'DocumentRendererParent.cpp',
     'ImageBitmap.cpp',
+    'ImageBitmapExtension.cpp',
     'ImageData.cpp',
 ]
 

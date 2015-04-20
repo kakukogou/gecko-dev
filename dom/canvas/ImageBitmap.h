@@ -10,6 +10,7 @@
 #include "mozilla/Attributes.h"
 #include "nsCycleCollectionParticipant.h"
 #include "mozilla/dom/ImageBitmapSource.h"
+#include "mozilla/dom/ColorFormatPixelLayout.h"
 #include "mozilla/gfx/Rect.h"
 
 struct JSContext;
@@ -40,6 +41,7 @@ class Promise;
 class CreateImageBitmapFromBlob;
 class CreateImageBitmapFromBlobTask;
 class CreateImageBitmapFromBlobWorkerTask;
+enum class ColorFormat : uint32_t;
 
 class ImageBitmap final : public nsISupports,
                           public nsWrapperCache
@@ -81,6 +83,18 @@ public:
   friend CreateImageBitmapFromBlobTask;
   friend CreateImageBitmapFromBlobWorkerTask;
 
+  // Mozilla extensions
+  ColorFormat
+  FindOptimalFormat(const Optional<Sequence<ColorFormat>>& possibleFormats);
+
+  int32_t
+  MappedDataLength(ColorFormat format, ErrorResult& aRv);
+
+  already_AddRefed<ColorFormatPixelLayout>
+  MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int32_t offset, int32_t length, ErrorResult& aRv);
+
+  bool SetDataFrom(ColorFormat aFormat, const ArrayBuffer& aWrapBuffer, int32_t aOffset, int32_t aLength, int32_t aWidth, int32_t aHeight, int32_t aStride, ErrorResult& aRv);
+
 protected:
 
   ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend);
@@ -88,6 +102,12 @@ protected:
   virtual ~ImageBitmap();
 
   void SetCrop(const gfx::IntRect& aRect, ErrorResult& aRv);
+
+  ColorFormat
+  GetColorFormat() const;
+
+  already_AddRefed<ColorFormatPixelLayout>
+  GetColorFormatPixelLayout() const;
 
   template<class HTMLElementType>
   static already_AddRefed<ImageBitmap>
