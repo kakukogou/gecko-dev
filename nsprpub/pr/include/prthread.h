@@ -163,6 +163,12 @@ NSPR_API(PRStatus) PR_SetCurrentThreadName(const char *name);
 NSPR_API(const char *) PR_GetThreadName(const PRThread *thread);
 
 /*
+** Return the name of "thread", if set.  Otherwise return NULL.
+*/
+NSPR_API(PRUint32) PR_GetThreadId(const PRThread *thread);
+
+
+/*
 ** This routine returns a new index for per-thread-private data table. 
 ** The index is visible to all threads within a process. This index can 
 ** be used with the PR_SetThreadPrivate() and PR_GetThreadPrivate() routines 

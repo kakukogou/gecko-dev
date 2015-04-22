@@ -1809,6 +1809,13 @@ PR_IMPLEMENT(const char *) PR_GetThreadName(const PRThread *thread)
     return thread->name;
 }
 
+PR_IMPLEMENT(PRUint32) PR_GetThreadId(const PRThread *thread)
+{
+    if (!thread)
+        return 0;
+    return thread->id;
+}
+
 #endif  /* defined(_PR_PTHREADS) || defined(_PR_DCETHREADS) */
 
 /* ptthread.c */

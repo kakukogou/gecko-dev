@@ -15,6 +15,7 @@ if CONFIG['OS_ARCH'] == 'WINNT':
     DIRS += ['staticruntime']
 
 EXPORTS += [
+    'AutoFuncLog.h',
     'MainThreadUtils.h',
     'nsArrayEnumerator.h',
     'nsArrayUtils.h',

@@ -448,6 +448,7 @@ EXPORTS ;-
 ;+} NSPR_4.8;
 ;+NSPR_4.9.2 {
 ;+      global:
+    PR_GetThreadId;
 		PR_GetThreadName;
 		PR_SetCurrentThreadName;
 ;+} NSPR_4.8.9;

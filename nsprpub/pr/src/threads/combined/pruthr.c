@@ -1615,6 +1615,12 @@ PR_IMPLEMENT(const char *) PR_GetThreadName(const PRThread *thread)
     return thread->name;
 }
 
+PR_IMPLEMENT(PRUint32) PR_GetThreadId(const PRThread *thread)
+{
+    if (!thread)
+        return 0;
+    return thread->id;
+}
 
 /*
 ** This routine prevents all other threads from running. This call is needed by 
