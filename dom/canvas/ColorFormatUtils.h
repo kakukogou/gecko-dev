@@ -173,6 +173,27 @@ getBytesPerOixelOfColorFormat(ColorFormat format) {
   }
 }
 
+template<ColorFormat SrcType, ColorFormat DstType>
+void
+ConvertColor(ImageBitmap& aImageBitmap, uint8_t* aDstBuffer, uint32_t aDstStride);
+
+template<>
+void
+ConvertColor<ColorFormat::YUV420P, ColorFormat::BGRA32>(ImageBitmap& aImageBitmap, uint8_t* aDstBuffer, uint32_t aDstStride)
+{
+  uint8_t* dstBuffer = nullptr;
+  uint32_t dstStride = 0;
+
+  // check destination buffer
+  if (aDstBuffer) {
+    dstBuffer = aDstBuffer;
+    dstStride = aDstStride;
+  }
+  else {
+//    aImageBitmap.mSurface = gfx::Factory::CreateDataSourceSurface(size, format);
+  }
+}
+
 }
 }
 
