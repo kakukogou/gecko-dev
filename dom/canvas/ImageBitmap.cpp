@@ -304,6 +304,42 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLCanvasElement& aCanvas
   return CreateFromElement(aGlobal, aCanvasEl, aRv);
 }
 
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, ImageData& aImageData, ErrorResult& aRv)
+{
+  // copy data into SourceSurface
+  dom::Uint8ClampedArray array;
+  DebugOnly<bool> inited = array.Init(aImageData.GetDataObject());
+  MOZ_ASSERT(inited);
+
+  array.ComputeLengthAndData();
+  const SurfaceFormat FORMAT = SurfaceFormat::B8G8R8A8;
+  const uint32_t BYTES_PER_PIXEL = BytesPerPixel(FORMAT);
+  const uint32_t imageWidth = aImageData.Width();
+  const uint32_t imageHeight = aImageData.Height();
+  const uint32_t imageStride = imageWidth * BYTES_PER_PIXEL;
+  const uint32_t dataLength = array.Length();
+  const gfx::IntSize imageSize(imageWidth, imageHeight);
+
+  // check the ImageData is neutered or not
+  if (imageWidth == 0 || imageHeight == 0 ||
+      (imageWidth * imageHeight * BYTES_PER_PIXEL) != dataLength) {
+    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    return nullptr;
+  }
+
+  nsRefPtr<layers::Image> backend =
+    CreateImageFromRawData(imageSize, imageStride, gfx::SurfaceFormat::B8G8R8A8, array.Data(), dataLength, aRv);
+
+  if (aRv.Failed()) {
+    return nullptr;
+  }
+
+  nsRefPtr<ImageBitmap> ret = new ImageBitmap(aGlobal, backend);
+  return ret.forget();
+}
+
 static void
 FulfillImageBitmapPromise(Promise* aPromise, ImageBitmap* aImageBitmap)
 {
@@ -360,6 +396,8 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
   } else if (aSrc.IsHTMLCanvasElement()) {
     MOZ_ASSERT(NS_IsMainThread(), "Creating ImageBitmap from HTMLImageElement off the main thread.");
     imageBitmap = CreateInternal(aGlobal, aSrc.GetAsHTMLCanvasElement(), aRv);
+  } else if (aSrc.IsImageData()) {
+    imageBitmap = CreateInternal(aGlobal, aSrc.GetAsImageData(), aRv);
   } else {
     aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
   }

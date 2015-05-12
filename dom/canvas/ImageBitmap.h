@@ -85,6 +85,9 @@ protected:
   static already_AddRefed<ImageBitmap>
   CreateInternal(nsIGlobalObject* aGlobal, HTMLCanvasElement& aCanvasEl, ErrorResult& aRv);
 
+  static already_AddRefed<ImageBitmap>
+  CreateInternal(nsIGlobalObject* aGlobal, ImageData& aImageData, ErrorResult& aRv);
+
   gfx::IntRect mCropRect;
   nsRefPtr<layers::Image> mBackend;
   nsCOMPtr<nsIGlobalObject> mParent;
