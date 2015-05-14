@@ -134,6 +134,7 @@ EXPORTS.mozilla.layers += [
     'D3D11ShareHandleImage.h',
     'D3D9SurfaceImage.h',
     'Effects.h',
+    'ImageBitmapImage.h',
     'ImageDataSerializer.h',
     'ipc/AsyncTransactionTracker.h',
     'ipc/CompositableForwarder.h',
@@ -327,6 +328,7 @@ UNIFIED_SOURCES += [
 
 SOURCES += [
     'basic/BasicImageLayer.cpp',
+    'ImageBitmapImage.cpp',
     'ImageContainer.cpp',
     'Layers.cpp',
     'LayerTreeInvalidation.cpp',
@@ -369,6 +371,7 @@ include('/ipc/chromium/chromium-config.mozbuild')
 LOCAL_INCLUDES += [
     '/docshell/base',  # for nsDocShell.h
     '/layout/base',    # for TouchManager.h
+    '/media/libyuv/include',  # for color conversion
 ]
 
 FINAL_LIBRARY = 'xul'

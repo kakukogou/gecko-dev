@@ -10,6 +10,7 @@
 #include "gfx2DGlue.h"
 #include "gfxPlatform.h"                // for gfxPlatform
 #include "gfxUtils.h"                   // for gfxUtils
+#include "ImageBitmapImage.h"
 #include "mozilla/RefPtr.h"             // for TemporaryRef
 #include "mozilla/ipc/CrossProcessMutex.h"  // for CrossProcessMutex, etc
 #include "mozilla/layers/CompositorTypes.h"
@@ -104,6 +105,10 @@ ImageFactory::CreateImage(ImageFormat aFormat,
     return img.forget();
   }
 #endif
+  if (aFormat == ImageFormat::IMAGEBITMAP_BACKEND) {
+    img = new ImageBitmapImage();
+    return img.forget();
+  }
   return nullptr;
 }
 
