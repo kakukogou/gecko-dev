@@ -83,25 +83,31 @@ CreateImageFromSurface(SourceSurface* aSurface, ErrorResult& aRv)
 }
 
 static inline bool
-CheckSecurityForHTMLElements(const nsLayoutUtils::SurfaceFromElementResult& aRes)
+CheckSecurityForHTMLElements(bool aIsWriteOnly, bool aCORSUsed, nsIPrincipal* aPrincipal)
 {
-  if (aRes.mIsWriteOnly) {
+  if (aIsWriteOnly) {
     return false;
   }
 
-  if (!aRes.mCORSUsed) {
+  if (!aCORSUsed) {
     nsIGlobalObject* incumbentSettingsObject = GetIncumbentGlobal();
     if (!incumbentSettingsObject) {
       return false;
     }
 
     nsIPrincipal* principal = incumbentSettingsObject->PrincipalOrNull();
-    if (!principal || !(principal->Subsumes(aRes.mPrincipal))) {
+    if (!principal || !(principal->Subsumes(aPrincipal))) {
       return false;
     }
   }
 
   return true;
+}
+
+static inline bool
+CheckSecurityForHTMLElements(const nsLayoutUtils::SurfaceFromElementResult& aRes)
+{
+  return CheckSecurityForHTMLElements(aRes.mIsWriteOnly, aRes.mCORSUsed, aRes.mPrincipal);
 }
 
 static inline bool
@@ -283,18 +289,40 @@ ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLImageElement& aImageEl
 already_AddRefed<ImageBitmap>
 ImageBitmap::CreateInternal(nsIGlobalObject* aGlobal, HTMLVideoElement& aVideoEl, ErrorResult& aRv)
 {
+  // check network state
   if (aVideoEl.NetworkState() == HTMLMediaElement::NETWORK_EMPTY) {
     aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
     return nullptr;
   }
 
+  // check ready state
   if (aVideoEl.ReadyState() == HTMLMediaElement::HAVE_NOTHING ||
       aVideoEl.ReadyState() == HTMLMediaElement::HAVE_METADATA) {
     aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
     return nullptr;
   }
 
-  return CreateFromElement(aGlobal, aVideoEl, aRv);
+  // Check security
+  nsCOMPtr<nsIPrincipal> principal = aVideoEl.GetCurrentPrincipal();
+  bool CORSUsed = aVideoEl.GetCORSMode() != CORS_NONE;
+  if (!CheckSecurityForHTMLElements(false, CORSUsed, principal)) {
+    aRv.Throw(NS_ERROR_DOM_SECURITY_ERR);
+    return nullptr;
+  }
+
+  // create ImageBitmap
+  ImageContainer *container = aVideoEl.GetImageContainer();
+
+  if (!container) {
+    aRv.Throw(NS_ERROR_NOT_AVAILABLE);
+    return nullptr;
+  }
+
+  nsRefPtr<layers::Image> backend = container->LockCurrentImage();
+  nsRefPtr<ImageBitmap> ret = new ImageBitmap(aGlobal, backend);
+  container->UnlockCurrentImage();
+
+  return ret.forget();
 }
 
 /* static */
