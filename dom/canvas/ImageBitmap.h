@@ -71,6 +71,9 @@ public:
   Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
          bool aCrop, const gfx::IntRect& aCropRect, ErrorResult& aRv);
 
+  static already_AddRefed<ImageBitmap>
+  Create(nsIGlobalObject* aGlobal, layers::Image* aImage);
+
   // Structured clone methods use these to clone ImageBitmap.
   static JSObject*
   ReadStructuredClone(JSContext* aCx, JSStructuredCloneReader* aReader);
@@ -78,12 +81,14 @@ public:
   static bool
   WriteStructuredClone(JSContext* aCx, JSStructuredCloneWriter* aWriter, ImageBitmap* aImageBitmap);
 
-
   friend CreateImageBitmapFromBlob;
   friend CreateImageBitmapFromBlobTask;
   friend CreateImageBitmapFromBlobWorkerTask;
 
   // Mozilla extensions
+  already_AddRefed<layers::Image>
+  GetImage() const;
+
   ColorFormat
   FindOptimalFormat(const Optional<Sequence<ColorFormat>>& possibleFormats);
 

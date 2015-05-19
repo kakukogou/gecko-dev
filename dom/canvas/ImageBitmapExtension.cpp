@@ -80,17 +80,27 @@ ColorFromatToSurfaceFormat(ColorFormat colorFromat) {
   }
 }
 
+already_AddRefed<layers::Image>
+ImageBitmap::GetImage() const
+{
+  nsRefPtr<layers::Image> image = mBackend;
+  return image.forget();
+}
+
 ColorFormat
 ImageBitmap::FindOptimalFormat(const Optional<Sequence<ColorFormat>>& possibleFormats)
 {
-  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
+//  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
   return GetColorFormat();
 }
 
 int32_t
 ImageBitmap::MappedDataLength(ColorFormat format, ErrorResult& aRv)
 {
-  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
+//  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
+  if (!mBackend) {
+    return 0;
+  }
 
   if (format == ColorFormat::_empty ||
       format == ColorFormat::BGR24 ||
@@ -144,8 +154,11 @@ ImageBitmap::MappedDataLength(ColorFormat format, ErrorResult& aRv)
 already_AddRefed<ColorFormatPixelLayout>
 ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int32_t offset, int32_t length, ErrorResult& aRv)
 {
-  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
   MOZ_ASSERT(format != ColorFormat::_empty,"No format is given.");
+  MOZ_ASSERT(mBackend, "No buffer container in ImageBitmap!");
+  if (!mBackend) {
+    return nullptr;
+  }
 
   if (format == ColorFormat::_empty ||
       format == ColorFormat::BGR24 ||
@@ -296,6 +309,7 @@ ImageBitmap::SetDataFrom(ColorFormat aFormat, const ArrayBuffer& aWrapBuffer, in
 
   // create a new backend
   const gfx::IntSize imageSize(aWidth, aHeight);
+
   mBackend = CreateImageFromRawData(imageSize, aStride, surfaceFormat, aWrapBuffer.Data() + aOffset, aLength, aRv);
 
   if (aRv.Failed()) {
@@ -314,6 +328,10 @@ ImageBitmap::SetDataFrom(ColorFormat aFormat, const ArrayBuffer& aWrapBuffer, in
 ColorFormat
 ImageBitmap::GetColorFormat() const
 {
+  if (!mBackend) {
+    return ColorFormat::_empty;
+  }
+
   if (mBackend->GetFormat() == ImageFormat::IMAGEBITMAP_BACKEND) {
     layers::ImageBitmapImage* image = static_cast<layers::ImageBitmapImage*> (mBackend.get());
 
@@ -342,6 +360,10 @@ ImageBitmap::GetColorFormat() const
 already_AddRefed<ColorFormatPixelLayout>
 ImageBitmap::GetColorFormatPixelLayout() const
 {
+  if (!mBackend) {
+    return nullptr;
+  }
+
   ColorFormat format = GetColorFormat();
   nsRefPtr<ColorFormatPixelLayout> layout(new ColorFormatPixelLayout(format, mBackend));
   return layout.forget();

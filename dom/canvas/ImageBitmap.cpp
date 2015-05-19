@@ -130,12 +130,18 @@ CheckNonBitmapSource(HTMLImageElement& aImageEl)
 }
 
 ImageBitmap::ImageBitmap(nsIGlobalObject* aGlobal, layers::Image* aBackend)
-  : mCropRect(0, 0, aBackend->GetSize().width, aBackend->GetSize().height)
+  : mCropRect()
   , mBackend(aBackend)
   , mParent(aGlobal)
   , mSurface(nullptr)
 {
-  MOZ_ASSERT(aBackend, "aBackend is null in ImageBitmap constructor.");
+//  MOZ_ASSERT(aBackend, "aBackend is null in ImageBitmap constructor.");
+  if (mBackend) {
+    mCropRect.x = 0;
+    mCropRect.y = 0;
+    mCropRect.width = aBackend->GetSize().width;
+    mCropRect.height = aBackend->GetSize().height;
+  }
 }
 
 ImageBitmap::~ImageBitmap()
@@ -198,7 +204,11 @@ ImageBitmap::PrepareForDrawTarget(gfx::DrawTarget* aTarget)
   MOZ_ASSERT(aTarget);
 
   if (!mSurface) {
-    mSurface = mBackend->GetAsSourceSurface();
+    if (mBackend) {
+      mSurface = mBackend->GetAsSourceSurface();
+    } else {
+      return nullptr;
+    }
   }
 
   if (!mSurface) {
@@ -779,6 +789,14 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
   }
 
   return promise.forget();
+}
+
+/* static */
+already_AddRefed<ImageBitmap>
+ImageBitmap::Create(nsIGlobalObject* aGlobal, layers::Image* aImage)
+{
+  nsRefPtr<ImageBitmap> imagebitmap = new ImageBitmap(aGlobal, aImage);
+  return imagebitmap.forget();
 }
 
 /* static */
