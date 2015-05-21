@@ -2123,6 +2123,12 @@ JS_ReadTypedArray(JSStructuredCloneReader* r, MutableHandleValue vp)
 }
 
 JS_PUBLIC_API(bool)
+JS_ReadPtr(JSStructuredCloneReader* r, void** p)
+{
+  return r->input().readPtr(p);
+}
+
+JS_PUBLIC_API(bool)
 JS_WriteUint32Pair(JSStructuredCloneWriter* w, uint32_t tag, uint32_t data)
 {
     return w->output().writePair(tag, data);
@@ -2147,4 +2153,10 @@ JS_WriteTypedArray(JSStructuredCloneWriter* w, HandleValue v)
     assertSameCompartment(w->context(), v);
     RootedObject obj(w->context(), &v.toObject());
     return w->writeTypedArray(obj);
+}
+
+JS_PUBLIC_API(bool)
+JS_WritePtr(JSStructuredCloneWriter* w, const void* p)
+{
+  return w->output().writePtr(p);
 }

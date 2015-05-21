@@ -234,6 +234,9 @@ JS_PUBLIC_API(bool)
 JS_ReadTypedArray(JSStructuredCloneReader* r, JS::MutableHandleValue vp);
 
 JS_PUBLIC_API(bool)
+JS_ReadPtr(JSStructuredCloneReader* r, void** p);
+
+JS_PUBLIC_API(bool)
 JS_WriteUint32Pair(JSStructuredCloneWriter* w, uint32_t tag, uint32_t data);
 
 JS_PUBLIC_API(bool)
@@ -244,5 +247,9 @@ JS_WriteString(JSStructuredCloneWriter* w, JS::HandleString str);
 
 JS_PUBLIC_API(bool)
 JS_WriteTypedArray(JSStructuredCloneWriter* w, JS::HandleValue v);
+
+JS_PUBLIC_API(bool)
+JS_WritePtr(JSStructuredCloneWriter* w, const void* p);
+
 
 #endif  /* js_StructuredClone_h */

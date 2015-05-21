@@ -13,6 +13,7 @@
 #include "mozilla/gfx/Rect.h"
 
 struct JSContext;
+struct JSStructuredCloneWriter;
 
 namespace mozilla {
 
@@ -67,6 +68,14 @@ public:
   static already_AddRefed<Promise>
   Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
          bool aCrop, const gfx::IntRect& aCropRect, ErrorResult& aRv);
+
+  // Structured clone methods use these to clone ImageBitmap.
+  static JSObject*
+  ReadStructuredClone(JSContext* aCx, JSStructuredCloneReader* aReader);
+
+  static bool
+  WriteStructuredClone(JSContext* aCx, JSStructuredCloneWriter* aWriter, ImageBitmap* aImageBitmap);
+
 
   friend CreateImageBitmapFromBlob;
   friend CreateImageBitmapFromBlobTask;

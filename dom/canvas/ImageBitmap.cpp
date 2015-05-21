@@ -13,6 +13,7 @@
 #include "mozilla/layers/ImageBitmapImage.h"
 #include "nsLayoutUtils.h"
 #include "imgTools.h"
+#include "js/StructuredClone.h"
 
 using namespace mozilla::gfx;
 using namespace mozilla::layers;
@@ -778,6 +779,69 @@ ImageBitmap::Create(nsIGlobalObject* aGlobal, const ImageBitmapSource& aSrc,
   }
 
   return promise.forget();
+}
+
+/* static */
+JSObject*
+ImageBitmap::ReadStructuredClone(JSContext* aCx, JSStructuredCloneReader* aReader)
+{
+  uint32_t cropRectX_;
+  uint32_t cropRectY_;
+  uint32_t cropRectWidth_;
+  uint32_t cropRectHeight_;
+  void* backend_;
+
+  if (!JS_ReadUint32Pair(aReader, &cropRectX_, &cropRectY_) ||
+      !JS_ReadUint32Pair(aReader, &cropRectWidth_, &cropRectHeight_) ||
+      !JS_ReadPtr(aReader, &backend_)) {
+    return nullptr;
+  }
+
+  int32_t cropRectX = BitwiseCast<int32_t>(cropRectX_);
+  int32_t cropRectY = BitwiseCast<int32_t>(cropRectY_);
+  int32_t cropRectWidth = BitwiseCast<int32_t>(cropRectWidth_);
+  int32_t cropRectHeight = BitwiseCast<int32_t>(cropRectHeight_);
+  layers::Image* backend = static_cast<layers::Image*>(backend_);
+
+  // Get the current global object.
+  nsIGlobalObject *global = xpc::NativeGlobal(JS::CurrentGlobalOrNull(aCx));
+  if (!global) {
+    return nullptr;
+  }
+
+  // Protect the result from a moving GC in ~nsRefPtr.
+  JS::Rooted<JSObject*> result(aCx);
+
+  // Create a new ImageBitmap.
+  nsRefPtr<ImageBitmap> imageBitmap = new ImageBitmap(global, backend);
+
+  ErrorResult error;
+  imageBitmap->SetCrop(IntRect(cropRectX, cropRectY, cropRectWidth, cropRectHeight), error);
+  if (error.Failed()) {
+    return nullptr;
+  }
+
+  // Wrap it in a JS::Value.
+  result = imageBitmap->WrapObject(aCx, JS::NullPtr());
+
+  return result;
+}
+
+/* static */
+bool
+ImageBitmap::WriteStructuredClone(JSContext* aCx, JSStructuredCloneWriter* aWriter, ImageBitmap* aImageBitmap)
+{
+  const uint32_t cropRectX = BitwiseCast<uint32_t>(aImageBitmap->mCropRect.x);
+  const uint32_t cropRectY = BitwiseCast<uint32_t>(aImageBitmap->mCropRect.y);
+  const uint32_t cropRectWidth = BitwiseCast<uint32_t>(aImageBitmap->mCropRect.width);
+  const uint32_t cropRectHeight = BitwiseCast<uint32_t>(aImageBitmap->mCropRect.height);
+
+  bool writeResult =  JS_WriteUint32Pair(aWriter, SCTAG_DOM_IMAGEBITMAP, 0) &&
+                      JS_WriteUint32Pair(aWriter, cropRectX, cropRectY) &&
+                      JS_WriteUint32Pair(aWriter, cropRectWidth, cropRectHeight) &&
+                      JS_WritePtr(aWriter, aImageBitmap->mBackend);
+
+  return writeResult;
 }
 
 } // namespace dom

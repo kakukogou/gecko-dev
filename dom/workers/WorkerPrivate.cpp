@@ -49,6 +49,8 @@
 #include "mozilla/dom/ErrorEventBinding.h"
 #include "mozilla/dom/Exceptions.h"
 #include "mozilla/dom/FunctionBinding.h"
+#include "mozilla/dom/ImageBitmap.h"
+#include "mozilla/dom/ImageBitmapBinding.h"
 #include "mozilla/dom/ImageData.h"
 #include "mozilla/dom/ImageDataBinding.h"
 #include "mozilla/dom/MessageEvent.h"
@@ -629,6 +631,11 @@ struct WorkerStructuredCloneCallbacks
       ReadFormData(aCx, aReader, /* aIsMainThread */ false,  aData, &formData);
       return formData;
     }
+    // See if the object is an ImageBitmap.
+    else if (aTag == SCTAG_DOM_IMAGEBITMAP) {
+      MOZ_ASSERT(!aData);
+      return ImageBitmap::ReadStructuredClone(aCx, aReader);
+    }
 
     Error(aCx, 0);
     return nullptr;
@@ -672,6 +679,14 @@ struct WorkerStructuredCloneCallbacks
         if (WriteFormData(aCx, aWriter, formData, *clonedObjects)) {
           return true;
         }
+      }
+    }
+
+    // See if this is an ImageBitmap object.
+    {
+      ImageBitmap* imageBitmap = nullptr;
+      if (NS_SUCCEEDED(UNWRAP_OBJECT(ImageBitmap, aObj, imageBitmap))) {
+        return ImageBitmap::WriteStructuredClone(aCx, aWriter, imageBitmap);
       }
     }
 

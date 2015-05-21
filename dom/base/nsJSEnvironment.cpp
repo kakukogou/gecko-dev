@@ -57,6 +57,8 @@
 #include "mozilla/AutoRestore.h"
 #include "mozilla/dom/CryptoKey.h"
 #include "mozilla/dom/ErrorEvent.h"
+#include "mozilla/dom/ImageBitmapBinding.h"
+#include "mozilla/dom/ImageBitmap.h"
 #include "mozilla/dom/ImageDataBinding.h"
 #include "mozilla/dom/ImageData.h"
 #ifdef MOZ_NFC
@@ -2545,6 +2547,8 @@ NS_DOMReadStructuredClone(JSContext* cx,
 #else
     return nullptr;
 #endif
+  } else if (tag == SCTAG_DOM_IMAGEBITMAP) {
+    return ImageBitmap::ReadStructuredClone(cx, reader);
   }
 
   // Don't know what this is. Bail.
@@ -2603,6 +2607,12 @@ NS_DOMWriteStructuredClone(JSContext* cx,
            ndefRecord->WriteStructuredClone(cx, writer);
   }
 #endif // MOZ_NFC
+
+  // Handle imageBitmap cloning
+  ImageBitmap* imageBitmap;
+  if (NS_SUCCEEDED(UNWRAP_OBJECT(ImageBitmap, obj, imageBitmap))) {
+    return ImageBitmap::WriteStructuredClone(cx, writer, imageBitmap);
+  }
 
   // Don't know what this is
   xpc::Throw(cx, NS_ERROR_DOM_DATA_CLONE_ERR);
