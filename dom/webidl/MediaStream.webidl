@@ -26,7 +26,9 @@ dictionary MediaStreamConstraints {
                                 // extra empty audio tracks.
     DOMString? peerIdentity = null;
 };
-
+[Constructor,
+ Constructor(MediaStream stream),
+ Constructor(sequence<MediaStreamTrack> tracks)]
 interface MediaStream : EventTarget {
     readonly attribute DOMString    id;
     sequence<AudioStreamTrack> getAudioTracks();

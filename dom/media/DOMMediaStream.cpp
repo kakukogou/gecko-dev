@@ -177,6 +177,43 @@ DOMMediaStream::DOMMediaStream()
     mStream(nullptr), mTracksCreated(false),
     mNotifiedOfMediaStreamGraphShutdown(false), mCORSMode(CORS_NONE)
 {
+  GenerateID(mID);
+}
+
+DOMMediaStream::DOMMediaStream(nsISupports* aParent)
+  : mLogicalStreamStartTime(0),
+    mStream(nullptr), mTracksCreated(false),
+    mNotifiedOfMediaStreamGraphShutdown(false),
+    mCORSMode(CORS_NONE)
+{
+  GenerateID(mID);
+  mWindow = do_QueryInterface(aParent);
+}
+
+// Fixme: Need to figure out how to deal with mStream
+DOMMediaStream::DOMMediaStream(nsISupports* aParent,
+                               const DOMMediaStream &aMediaStream)
+  : mLogicalStreamStartTime(aMediaStream.mLogicalStreamStartTime),
+    mStream(nullptr), mTracksCreated(aMediaStream.mTracksCreated),
+    mNotifiedOfMediaStreamGraphShutdown(aMediaStream.mNotifiedOfMediaStreamGraphShutdown),
+    mCORSMode(aMediaStream.mCORSMode)
+{
+  GenerateID(mID);
+  mWindow = do_QueryInterface(aParent);
+  InitTrackUnionStream(mWindow, aMediaStream.GetStream()->Graph());
+  // Setup track listener
+  mListener = new DOMMediaStream::StreamListener(this);
+  mStream->AddListener(mListener);
+
+  // Setup tracks
+  for (uint32_t ix = 0; aMediaStream.mTracks.Length(); ix++) {
+    mTracks.AppendElement(aMediaStream.mTracks[ix]);
+  }
+}
+
+void
+DOMMediaStream::GenerateID(nsString& aID)
+{
   nsresult rv;
   nsCOMPtr<nsIUUIDGenerator> uuidgen =
     do_GetService("@mozilla.org/uuid-generator;1", &rv);
@@ -188,7 +225,7 @@ DOMMediaStream::DOMMediaStream()
     if (NS_SUCCEEDED(rv)) {
       char buffer[NSID_LENGTH];
       uuid.ToProvidedString(buffer);
-      mID = NS_ConvertASCIItoUTF16(buffer);
+      aID = NS_ConvertASCIItoUTF16(buffer);
     }
   }
 }
@@ -215,6 +252,42 @@ JSObject*
 DOMMediaStream::WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto)
 {
   return dom::MediaStreamBinding::Wrap(aCx, this, aGivenProto);
+}
+
+already_AddRefed<DOMMediaStream>
+DOMMediaStream::Constructor(const dom::GlobalObject& aGlobal,
+            ErrorResult& aRv)
+{
+  nsRefPtr<DOMMediaStream> obj = new DOMMediaStream(aGlobal.GetAsSupports());
+  return obj.forget();
+}
+
+already_AddRefed<DOMMediaStream>
+DOMMediaStream::Constructor(const dom::GlobalObject& aGlobal,
+            DOMMediaStream& aStream,
+            ErrorResult& aRv)
+{
+  nsRefPtr<DOMMediaStream> obj = new DOMMediaStream(aGlobal.GetAsSupports(), aStream);
+  return obj.forget();
+}
+
+already_AddRefed<DOMMediaStream>
+DOMMediaStream::Constructor(const dom::GlobalObject& aGlobal,
+            const dom::Sequence<dom::OwningNonNull<MediaStreamTrack>>& aTracks,
+            ErrorResult& aRv)
+{
+  nsRefPtr<DOMMediaStream> obj = new DOMMediaStream(aGlobal.GetAsSupports());
+  obj->InitTrackUnionStream(obj->mWindow, aTracks[0]->GetStream()->GetStream()->Graph());
+
+  // Setup tracks
+  for (uint32_t ix = 0; aTracks.Length(); ix++) {
+    obj->mTracks.AppendElement(aTracks[ix]);
+  }
+
+  // Setup track listener
+  obj->mListener = new DOMMediaStream::StreamListener(obj);
+  obj->mStream->AddListener(obj->mListener);
+  return obj.forget();
 }
 
 double

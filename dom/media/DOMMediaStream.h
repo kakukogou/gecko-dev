@@ -14,6 +14,7 @@
 #include "mozilla/PeerIdentity.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/CORSMode.h"
+#include "mozilla/dom/BindingDeclarations.h"
 
 // GetCurrentTime is defined in winbase.h as zero argument macro forwarding to
 // GetTickCount() and conflicts with NS_DECL_NSIDOMMEDIASTREAM, containing
@@ -71,6 +72,9 @@ public:
   typedef uint8_t TrackTypeHints;
 
   DOMMediaStream();
+  explicit DOMMediaStream(nsISupports* aParent);
+  explicit DOMMediaStream(nsISupports* aParent, const DOMMediaStream &aMediaStream);
+  void GenerateID(nsString& aID);
 
   NS_DECL_ISUPPORTS_INHERITED
   NS_REALLY_FORWARD_NSIDOMEVENTTARGET(DOMEventTargetHelper)
@@ -85,6 +89,15 @@ public:
   virtual JSObject* WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) override;
 
   // WebIDL
+  static already_AddRefed<DOMMediaStream> Constructor(const dom::GlobalObject& aGlobal,
+                                                      ErrorResult& aRv);
+  static already_AddRefed<DOMMediaStream> Constructor(const dom::GlobalObject& aGlobal,
+                                                      DOMMediaStream& aStream,
+                                                      ErrorResult& aRv);
+  static already_AddRefed<DOMMediaStream> Constructor(const dom::GlobalObject& aGlobal,
+                                                      const dom::Sequence<dom::OwningNonNull<MediaStreamTrack>>& aTracks,
+                                                      ErrorResult& aRv);
+
   double CurrentTime();
 
   void GetId(nsAString& aID) const;
