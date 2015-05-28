@@ -67,7 +67,6 @@ class AutoSyncLoopHolder;
 class MessagePort;
 class SharedWorker;
 class ServiceWorkerClientInfo;
-class VideoWorker;
 class WorkerControlRunnable;
 class WorkerDebugger;
 class WorkerDebuggerGlobalScope;
@@ -691,7 +690,7 @@ public:
   bool
   IsDedicatedWorker() const
   {
-    return mWorkerType == WorkerTypeDedicated || mWorkerType == WorkerTypeVideo;
+    return mWorkerType == WorkerTypeDedicated;
   }
 
   bool
@@ -704,12 +703,6 @@ public:
   IsServiceWorker() const
   {
     return mWorkerType == WorkerTypeService;
-  }
-
-  bool
-  IsVideoWorker() const
-  {
-    return mWorkerType == WorkerTypeVideo;
   }
 
   const nsCString&
@@ -833,7 +826,6 @@ class WorkerPrivate : public WorkerPrivateParent<WorkerPrivate>
   friend class WorkerPrivateParent<WorkerPrivate>;
   typedef WorkerPrivateParent<WorkerPrivate> ParentType;
   friend class AutoSyncLoopHolder;
-  friend class VideoWorkerPrivate;
 
   struct TimeoutInfo;
 
@@ -1446,30 +1438,6 @@ public:
   {
     return mTarget;
   }
-};
-
-class VideoWorkerPrivate : public WorkerPrivate
-{
-  friend class WorkerPrivate;
-public:
-  static already_AddRefed<VideoWorkerPrivate>
-  Constructor(const GlobalObject& aGlobal, const nsAString& aScriptURL,
-              ErrorResult& aRv);
-
-  static bool
-  WorkerAvailable(JSContext* aCx, JSObject* /* unused */);
-
-  virtual JSObject*
-  WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) override;
-
-
-private:
-  VideoWorkerPrivate(JSContext* aCx, WorkerPrivate* aParent,
-                     const nsAString& aScriptURL, bool aIsChromeWorker,
-                     WorkerType aWorkerType,
-                     const nsACString& aSharedWorkerName,
-                     WorkerLoadInfo& aLoadInfo);
-  ~VideoWorkerPrivate();
 };
 
 END_WORKERS_NAMESPACE

@@ -12,8 +12,8 @@
  * this document.
  */
 
-[Global=(Worker,DedicatedWorker,VideoWorker),
- Exposed=(DedicatedWorker,VideoWorker)]
+[Global=(Worker,DedicatedWorker),
+ Exposed=DedicatedWorker]
 interface DedicatedWorkerGlobalScope : WorkerGlobalScope {
   [Throws]
   void postMessage(any message, optional sequence<any> transfer);

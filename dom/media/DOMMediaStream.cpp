@@ -17,7 +17,6 @@
 #include "MediaStreamGraph.h"
 #include "AudioStreamTrack.h"
 #include "VideoStreamTrack.h"
-#include "TrackUnionStream.h"
 
 using namespace mozilla;
 using namespace mozilla::dom;
@@ -274,26 +273,15 @@ DOMMediaStream::Constructor(const dom::GlobalObject& aGlobal,
 
 already_AddRefed<DOMMediaStream>
 DOMMediaStream::Constructor(const dom::GlobalObject& aGlobal,
-                            const dom::Sequence<dom::OwningNonNull<MediaStreamTrack>>& aTracks,
-                            ErrorResult& aRv)
+            const dom::Sequence<dom::OwningNonNull<MediaStreamTrack>>& aTracks,
+            ErrorResult& aRv)
 {
   nsRefPtr<DOMMediaStream> obj = new DOMMediaStream(aGlobal.GetAsSupports());
-  obj->InitVideoProcessorStream(obj->mWindow, MediaStreamGraph::GetInstance());
+  obj->InitTrackUnionStream(obj->mWindow, aTracks[0]->GetStream()->GetStream()->Graph());
 
-  // Fixme: Work around
   // Setup tracks
-  for (uint32_t ix = 0; ix < aTracks.Length(); ix++) {
-    aTracks[ix]->SetStream(obj);
-    nsString id;
-    aTracks[ix]->GetId(id);
-    VideoStreamTrack* videoTrack = aTracks[ix]->AsVideoStreamTrack();
+  for (uint32_t ix = 0; aTracks.Length(); ix++) {
     obj->mTracks.AppendElement(aTracks[ix]);
-    if (videoTrack) {
-      nsRefPtr<MediaInputPort> port = obj->GetStream()->
-            AsProcessedStream()->AllocateInputPort(videoTrack->mForkSource.first()->GetStream(),
-                                                   MediaInputPort::FLAG_BLOCK_OUTPUT);
-      obj->AddWorkerProcessor(videoTrack->mVideoWorkerProcessor, videoTrack->mForkSource.second(), id, port);
-    }
   }
 
   // Setup track listener
@@ -380,19 +368,6 @@ DOMMediaStream::InitTrackUnionStream(nsIDOMWindow* aWindow,
   }
   InitStreamCommon(aGraph->CreateTrackUnionStream(this));
 }
-
-void
-DOMMediaStream::InitVideoProcessorStream(nsIDOMWindow* aWindow,
-                                         MediaStreamGraph* aGraph)
-{
-  mWindow = aWindow;
-
-  if (!aGraph) {
-    aGraph = MediaStreamGraph::GetInstance();
-  }
-  InitStreamCommon(aGraph->CreateTrackUnionStream(this));
-}
-
 
 void
 DOMMediaStream::InitStreamCommon(MediaStream* aStream)
@@ -705,67 +680,6 @@ DOMMediaStream::NotifyMediaStreamTrackEnded(MediaStreamTrack* aTrack)
     mMediaTrackListListeners[i].NotifyMediaTrackEnded(id);
   }
 }
-
-void
-DOMMediaStream::AddWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
-                                 TrackID aTrackID,
-                                 const nsString& aID)
-{
-  TrackUnionStream* unionStream = mStream->AsTrackUnionStream();
-  if (unionStream) {
-    unionStream->AddWorkerMonitor(aWorker, aTrackID, aID);
-  }
-}
-
-void
-DOMMediaStream::RemoveWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
-                                    TrackID aTrackID)
-{
-  TrackUnionStream* unionStream = mStream->AsTrackUnionStream();
-  if (unionStream) {
-    unionStream->RemoveWorkerMonitor(aWorker, aTrackID);
-  }
-}
-
-void
-DOMMediaStream::AddWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
-                                 TrackID aTrackID,
-                                 const nsString& aID,
-                                 MediaInputPort* aPort)
-{
-  TrackUnionStream* unionStream = mStream->AsTrackUnionStream();
-  if (unionStream) {
-    unionStream->AddWorkerProcessor(aWorker, aTrackID, aID, aPort);
-  }
-}
-
-void DOMMediaStream::RemoveWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
-                                           TrackID aTrackID)
-{
-  TrackUnionStream* unionStream = mStream->AsTrackUnionStream();
-  if (unionStream) {
-    unionStream->RemoveWorkerProcessor(aWorker, aTrackID);
-  }
-}
-
-already_AddRefed<MediaStreamTrack>
-DOMMediaStream::CopyMediaStreamTrack(TrackID aTrackID, MediaSegment::Type aType)
-{
-  nsRefPtr<MediaStreamTrack> track;
-  switch (aType) {
-  case MediaSegment::AUDIO:
-    track = new AudioStreamTrack(this, aTrackID);
-    break;
-  case MediaSegment::VIDEO:
-    track = new VideoStreamTrack(this, aTrackID);
-    break;
-  default:
-    MOZ_CRASH("Unhandled track type");
-  }
-
-  return track.forget();
-}
-
 
 DOMLocalMediaStream::~DOMLocalMediaStream()
 {

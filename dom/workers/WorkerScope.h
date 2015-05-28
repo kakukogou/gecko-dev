@@ -40,7 +40,6 @@ class IDBFactory;
 
 BEGIN_WORKERS_NAMESPACE
 
-class VideoWorkerPrivate;
 class ServiceWorkerClients;
 class WorkerPrivate;
 class WorkerLocation;
@@ -311,27 +310,6 @@ public:
 private:
   virtual ~WorkerDebuggerGlobalScope();
 };
-
-class VideoWorkerGlobalScope final : public WorkerGlobalScope
-{
-  ~VideoWorkerGlobalScope() { }
-
-public:
-  VideoWorkerGlobalScope(WorkerPrivate* aWorkerPrivate);
-
-  virtual bool
-  WrapGlobalObject(JSContext* aCx,
-                   JS::MutableHandle<JSObject*> aReflector) override;
-
-  void
-  PostMessage(JSContext* aCx, JS::Handle<JS::Value> aMessage,
-              const Optional<Sequence<JS::Value>>& aTransferable,
-              ErrorResult& aRv);
-
-  IMPL_EVENT_HANDLER(videoprocess)
-  IMPL_EVENT_HANDLER(message)
-};
-
 
 END_WORKERS_NAMESPACE
 

@@ -10,10 +10,6 @@
 #include "nsID.h"
 #include "StreamBuffer.h"
 
-BEGIN_WORKERS_NAMESPACE
-class VideoWorkerPrivate;
-END_WORKERS_NAMESPACE
-
 namespace mozilla {
 
 class DOMMediaStream;
@@ -54,29 +50,13 @@ public:
   void SetEnabled(bool aEnabled);
   void Stop();
 
-  void AddWorkerMonitor(JSContext* cx,
-                        workers::VideoWorkerPrivate& worker,
-                        JS::Handle<JSObject*> parameters);
-  void RemoveWorkerMonitor(JSContext* cx,
-                           workers::VideoWorkerPrivate& worker,
-                           JS::Handle<JSObject*> parameters);
-
-  already_AddRefed<MediaStreamTrack>
-  AddWorkerProcessor(JSContext* cx,
-                     workers::VideoWorkerPrivate& worker,
-                     JS::Handle<JSObject*> parameters);
-  void RemoveWorkerProcessor(JSContext* cx,
-                             workers::VideoWorkerPrivate& worker,
-                             JS::Handle<JSObject*> parameters);
-
   // Notifications from the MediaStreamGraph
   void NotifyEnded() { mEnded = true; }
 
   // Webrtc allows the remote side to name tracks whatever it wants, and we
   // need to surface this to content.
   void AssignId(const nsAString& aID) { mID = aID; }
-  void SetStream(DOMMediaStream* stream) { printf_stderr("stream = %p this=%p\n", stream, this); mStream = stream; }
-  void SetTrackID(TrackID id) { mTrackID = id; }
+
 protected:
   virtual ~MediaStreamTrack();
 
@@ -87,7 +67,7 @@ protected:
   bool mEnabled;
 };
 
-} // namespace dom
-} // namespace mozilla
+}
+}
 
 #endif /* MEDIASTREAMTRACK_H_ */
