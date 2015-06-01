@@ -30,7 +30,11 @@ NS_INTERFACE_MAP_END
 
 ColorFormatPixelLayout::ColorFormatPixelLayout()
 {
+}
 
+ColorFormatPixelLayout::ColorFormatPixelLayout(ColorFormat aFormat)
+  : mChannels(getChannelCountOfColorFormat(aFormat)) // init the capacity
+{
 }
 
 //ColorFormatPixelLayout::ColorFormatPixelLayout(ColorFormat format,
@@ -208,6 +212,54 @@ void
 ColorFormatPixelLayout::GetChannels(nsTArray<nsRefPtr<ChannelPixelLayout>>& aRetVal) const
 {
   aRetVal = mChannels;
+}
+
+/* static */
+already_AddRefed<ColorFormatPixelLayout>
+ColorFormatPixelLayout::CreateRGBAFormat(uint32_t aWidth, uint32_t aHeight, uint32_t aStride)
+{
+  nsRefPtr<ColorFormatPixelLayout> layout(new ColorFormatPixelLayout(ColorFormat::BGRA32));
+  uint8_t channelCount = getChannelCountOfColorFormat(ColorFormat::BGRA32);
+  for (uint8_t i = 0; i < channelCount; ++i) {
+    nsRefPtr<ChannelPixelLayout> *channel = layout->mChannels.AppendElement();
+    (*channel) = new ChannelPixelLayout();
+    (*channel)->mOffset = i;
+    (*channel)->mWidth = aWidth;
+    (*channel)->mHeight = aHeight;
+    (*channel)->mStride = aStride;
+    (*channel)->mSkip = channelCount - 1;
+  }
+
+  return layout.forget();
+}
+
+/* static */
+already_AddRefed<ColorFormatPixelLayout>
+ColorFormatPixelLayout::CreateYUVFormat(uint32_t aYWidth, uint32_t aYHeight, uint32_t aYStride,
+                                        uint32_t aUWidth, uint32_t aUHeight, uint32_t aUStride,
+                                        uint32_t aVWidth, uint32_t aVHeight, uint32_t aVStride)
+{
+  nsRefPtr<ColorFormatPixelLayout> layout(new ColorFormatPixelLayout(ColorFormat::YUV420P));
+  nsRefPtr<ChannelPixelLayout> *ychannel = layout->mChannels.AppendElement(); (*ychannel) = new ChannelPixelLayout();
+  nsRefPtr<ChannelPixelLayout> *uchannel = layout->mChannels.AppendElement(); (*uchannel) = new ChannelPixelLayout();
+  nsRefPtr<ChannelPixelLayout> *vchannel = layout->mChannels.AppendElement(); (*vchannel) = new ChannelPixelLayout();
+  (*ychannel)->mOffset = 0;
+  (*uchannel)->mOffset = (*ychannel)->mOffset + aYStride * aYHeight;
+  (*vchannel)->mOffset = (*uchannel)->mOffset + aUStride * aVHeight;
+  (*ychannel)->mWidth  = aYWidth;
+  (*ychannel)->mHeight = aYHeight;
+  (*ychannel)->mStride = aYStride;
+  (*ychannel)->mSkip   = 0; // aYSkip;
+  (*uchannel)->mWidth  = aUWidth;
+  (*uchannel)->mHeight = aUHeight;
+  (*uchannel)->mStride = aUStride;
+  (*uchannel)->mSkip   = 0; // aUSkip;
+  (*vchannel)->mWidth  = aVWidth;
+  (*vchannel)->mHeight = aVHeight;
+  (*vchannel)->mStride = aVStride;
+  (*vchannel)->mSkip   = 0; // aVSkip;
+
+  return layout.forget();
 }
 
 /* static */

@@ -160,6 +160,7 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
     return nullptr;
   }
 
+  // check if we support the wanted format or not
   if (format == ColorFormat::_empty ||
       format == ColorFormat::BGR24 ||
       format == ColorFormat::RGB24 ||
@@ -170,39 +171,10 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
     return nullptr;
   }
 
-  // copy the data into buffer
+  // find out the current color format
   ColorFormat const optimalFormat = GetColorFormat();
 
-  if (format != optimalFormat) {
-    // TODO: do conversion here...
-  }
-
-  // fill-in the inputed heap
-  uint8_t *dataSrc = nullptr;
-  int32_t dataSize = 0;
-  gfx::IntSize imageSize;
-
-  if (format == ColorFormat::RGBA32 || format == ColorFormat::BGRA32) {
-    layers::ImageBitmapImage* imagebitmapImage = static_cast<layers::ImageBitmapImage*> (mBackend.get());
-    dataSrc = imagebitmapImage->GetBuffer();
-    dataSize = imagebitmapImage->GetBufferLength();
-    imageSize = imagebitmapImage->GetSize();
-  }
-  else if (format == ColorFormat::YUV444P ||
-           format == ColorFormat::YUV422P ||
-           format == ColorFormat::YUV420P ||
-           format == ColorFormat::YUV420SP_NV12 ||
-           format == ColorFormat::YUV420SP_NV21) {
-    layers::PlanarYCbCrImage* ycbcrImage = static_cast<layers::PlanarYCbCrImage*> (mBackend.get());
-    dataSrc = ycbcrImage->GetData()->mYChannel;
-    dataSize = ycbcrImage->GetDataSize();
-    imageSize = ycbcrImage->GetSize();
-  }
-  else {
-    aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
-    return nullptr;
-  }
-
+  // prepare destination buffer.
   aWrapBuffer.ComputeLengthAndData();
   uint32_t const bufferLength = aWrapBuffer.Length();
 
@@ -213,6 +185,7 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
     return nullptr;
   }
 
+  // do color conversion if needed
   bool isSameColorFormat = false;
   switch(format) {
   case ColorFormat::RGBA32:
@@ -224,6 +197,8 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
       libyuv::ABGRToARGB(src->GetBuffer(), src->GetStride(),
                          aWrapBuffer.Data()+offset, src->GetStride(),
                          src->GetSize().width, src->GetSize().height);
+
+      return ColorFormatPixelLayout::CreateRGBAFormat(src->GetSize().width, src->GetSize().height, src->GetStride());
     } else {
       // all YUV cases
       layers::PlanarYCbCrImage* ycbcrImage = static_cast<layers::PlanarYCbCrImage*> (mBackend.get());
@@ -233,6 +208,8 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
                          src->mCrChannel, src->mCbCrStride,
                          aWrapBuffer.Data()+offset, src->mYSize.width*4,
                          src->mYSize.width, src->mYSize.height);
+
+      return ColorFormatPixelLayout::CreateRGBAFormat(src->mYSize.width, src->mYSize.height, src->mYSize.width*4);
     }
   }
   break;
@@ -243,6 +220,8 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
       libyuv::ABGRToARGB(src->GetBuffer(), src->GetStride(),
                          aWrapBuffer.Data()+offset, src->GetStride(),
                          src->GetSize().width, src->GetSize().height);
+
+      return ColorFormatPixelLayout::CreateRGBAFormat(src->GetSize().width, src->GetSize().height, src->GetStride());
     } else if (optimalFormat == ColorFormat::BGRA32) {
       isSameColorFormat = true;
     } else {
@@ -254,6 +233,8 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
                          src->mCrChannel, src->mCbCrStride,
                          aWrapBuffer.Data()+offset, src->mYSize.width*4,
                          src->mYSize.width, src->mYSize.height);
+
+      return ColorFormatPixelLayout::CreateRGBAFormat(src->mYSize.width, src->mYSize.height, src->mYSize.width*4);
     }
   }
   break;
@@ -275,6 +256,33 @@ ImageBitmap::MapDataInto(ColorFormat format, const ArrayBuffer& aWrapBuffer, int
     }
   }
   break;
+  }
+
+  // NO color conversion is needed, copy the current data into the destination buffer.
+  // prepare source buffer
+  uint8_t *dataSrc = nullptr;
+  int32_t dataSize = 0;
+  gfx::IntSize imageSize;
+
+  if (optimalFormat == ColorFormat::RGBA32 || optimalFormat == ColorFormat::BGRA32) {
+    layers::ImageBitmapImage* imagebitmapImage = static_cast<layers::ImageBitmapImage*> (mBackend.get());
+    dataSrc = imagebitmapImage->GetBuffer();
+    dataSize = imagebitmapImage->GetBufferLength();
+    imageSize = imagebitmapImage->GetSize();
+  }
+  else if (optimalFormat == ColorFormat::YUV444P ||
+           optimalFormat == ColorFormat::YUV422P ||
+           optimalFormat == ColorFormat::YUV420P ||
+           optimalFormat == ColorFormat::YUV420SP_NV12 ||
+           optimalFormat == ColorFormat::YUV420SP_NV21) {
+    layers::PlanarYCbCrImage* ycbcrImage = static_cast<layers::PlanarYCbCrImage*> (mBackend.get());
+    dataSrc = ycbcrImage->GetData()->mYChannel;
+    dataSize = ycbcrImage->GetDataSize();
+    imageSize = ycbcrImage->GetSize();
+  }
+  else {
+    aRv.Throw(NS_ERROR_NOT_IMPLEMENTED);
+    return nullptr;
   }
 
   if (isSameColorFormat) {

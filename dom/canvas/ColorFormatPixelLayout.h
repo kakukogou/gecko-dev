@@ -38,8 +38,18 @@ public:
 //                         gfx::SourceSurface *surface,
 //                         layers::PlanarYCbCrData const *ycbcrLayout = nullptr);
 
+  ColorFormatPixelLayout(ColorFormat aFormat);
+
   ColorFormatPixelLayout(ColorFormat aFormat,
                          layers::Image* aImage);
+
+  static already_AddRefed<ColorFormatPixelLayout>
+  CreateRGBAFormat(uint32_t aWidth, uint32_t aHeight, uint32_t aStride);
+
+  static already_AddRefed<ColorFormatPixelLayout>
+  CreateYUVFormat(uint32_t aYWidth, uint32_t aYHeight, uint32_t aYStride,
+                  uint32_t aUWidth, uint32_t aUHeight, uint32_t aUStride,
+                  uint32_t aVWidth, uint32_t aVHeight, uint32_t aVStride);
 
 protected:
   ~ColorFormatPixelLayout();
