@@ -67,7 +67,6 @@ class AutoSyncLoopHolder;
 class MessagePort;
 class SharedWorker;
 class ServiceWorkerClientInfo;
-class VideoWorker;
 class WorkerControlRunnable;
 class WorkerDebugger;
 class WorkerDebuggerGlobalScope;
@@ -158,8 +157,6 @@ protected:
   // Protected by mMutex.
   nsRefPtr<EventTarget> mEventTarget;
   nsTArray<nsRefPtr<WorkerRunnable>> mPreStartRunnables;
-  uint64_t mBusyCount;
-  Status mParentStatus;
 
 private:
   WorkerPrivate* mParent;
@@ -182,7 +179,9 @@ private:
   // thread as SharedWorkers are always top-level).
   nsDataHashtable<nsUint64HashKey, SharedWorker*> mSharedWorkers;
 
+  uint64_t mBusyCount;
   uint64_t mMessagePortSerial;
+  Status mParentStatus;
   bool mParentFrozen;
   bool mIsChromeWorker;
   bool mMainThreadObjectsForgotten;
@@ -313,7 +312,7 @@ public:
   bool
   Close();
 
-  virtual bool
+  bool
   ModifyBusyCount(JSContext* aCx, bool aIncrease);
 
   void
@@ -691,7 +690,7 @@ public:
   bool
   IsDedicatedWorker() const
   {
-    return mWorkerType == WorkerTypeDedicated || mWorkerType == WorkerTypeVideo;
+    return mWorkerType == WorkerTypeDedicated;
   }
 
   bool
@@ -704,12 +703,6 @@ public:
   IsServiceWorker() const
   {
     return mWorkerType == WorkerTypeService;
-  }
-
-  bool
-  IsVideoWorker() const
-  {
-    return mWorkerType == WorkerTypeVideo;
   }
 
   const nsCString&
@@ -833,7 +826,6 @@ class WorkerPrivate : public WorkerPrivateParent<WorkerPrivate>
   friend class WorkerPrivateParent<WorkerPrivate>;
   typedef WorkerPrivateParent<WorkerPrivate> ParentType;
   friend class AutoSyncLoopHolder;
-  friend class VideoWorkerPrivate;
 
   struct TimeoutInfo;
 
@@ -1446,32 +1438,6 @@ public:
   {
     return mTarget;
   }
-};
-
-class VideoWorkerPrivate : public WorkerPrivate
-{
-  friend class WorkerPrivate;
-public:
-  static already_AddRefed<VideoWorkerPrivate>
-  Constructor(const GlobalObject& aGlobal, const nsAString& aScriptURL,
-              ErrorResult& aRv);
-
-  static bool
-  WorkerAvailable(JSContext* aCx, JSObject* /* unused */);
-
-  virtual JSObject*
-  WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) override;
-
-  virtual bool
-  ModifyBusyCount(JSContext* aCx, bool aIncrease) override;
-
-private:
-  VideoWorkerPrivate(JSContext* aCx, WorkerPrivate* aParent,
-                     const nsAString& aScriptURL, bool aIsChromeWorker,
-                     WorkerType aWorkerType,
-                     const nsACString& aSharedWorkerName,
-                     WorkerLoadInfo& aLoadInfo);
-  ~VideoWorkerPrivate();
 };
 
 END_WORKERS_NAMESPACE

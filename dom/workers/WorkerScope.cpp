@@ -17,7 +17,6 @@
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/ServiceWorkerGlobalScopeBinding.h"
 #include "mozilla/dom/SharedWorkerGlobalScopeBinding.h"
-#include "mozilla/dom/VideoWorkerGlobalScopeBinding.h"
 #include "mozilla/dom/WorkerDebuggerGlobalScopeBinding.h"
 #include "mozilla/dom/WorkerGlobalScopeBinding.h"
 #include "mozilla/dom/cache/CacheStorage.h"
@@ -827,37 +826,6 @@ GetterOnlyJSNative(JSContext* aCx, unsigned aArgc, JS::Value* aVp)
 {
   JS_ReportErrorNumber(aCx, js::GetErrorMessage, nullptr, JSMSG_GETTER_ONLY);
   return false;
-}
-
-
-VideoWorkerGlobalScope::VideoWorkerGlobalScope(WorkerPrivate* aWorkerPrivate)
-: WorkerGlobalScope(aWorkerPrivate)
-{
-}
-
-bool
-VideoWorkerGlobalScope::WrapGlobalObject(JSContext* aCx,
-                                         JS::MutableHandle<JSObject*> aReflector)
-{
-  mWorkerPrivate->AssertIsOnWorkerThread();
-  MOZ_ASSERT(!mWorkerPrivate->IsSharedWorker());
-
-  JS::CompartmentOptions options;
-  mWorkerPrivate->CopyJSCompartmentOptions(options);
-
-  return VideoWorkerGlobalScopeBinding_workers::Wrap(aCx, this, this, options,
-                                                     GetWorkerPrincipal(),
-                                                     true, aReflector);
-}
-
-void
-VideoWorkerGlobalScope::PostMessage(JSContext* aCx,
-                                    JS::Handle<JS::Value> aMessage,
-                                    const Optional<Sequence<JS::Value>>& aTransferable,
-                                    ErrorResult& aRv)
-{
-  mWorkerPrivate->AssertIsOnWorkerThread();
-  mWorkerPrivate->PostMessageToParent(aCx, aMessage, aTransferable, aRv);
 }
 
 END_WORKERS_NAMESPACE

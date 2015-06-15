@@ -4,15 +4,11 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "VideoStreamTrack.h"
-#include "WorkerPrivate.h"
+
 #include "mozilla/dom/VideoStreamTrackBinding.h"
 
 namespace mozilla {
 namespace dom {
-
-VideoStreamTrack::VideoStreamTrack(DOMMediaStream* aStream, TrackID aTrackID)
-  : MediaStreamTrack(aStream, aTrackID),
-    mForkSource(nullptr, -1) {}
 
 JSObject*
 VideoStreamTrack::WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto)

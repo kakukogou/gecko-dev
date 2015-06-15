@@ -52,8 +52,7 @@ enum WorkerType
 {
   WorkerTypeDedicated,
   WorkerTypeShared,
-  WorkerTypeService,
-  WorkerTypeVideo,
+  WorkerTypeService
 };
 }
 }

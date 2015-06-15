@@ -4747,9 +4747,9 @@ WorkerPrivate::Constructor(JSContext* aCx,
     AssertIsOnMainThread();
   }
 
-  MOZ_ASSERT_IF(aWorkerType != WorkerTypeDedicated || aWorkerType != WorkerTypeVideo,
+  MOZ_ASSERT_IF(aWorkerType != WorkerTypeDedicated,
                 !aSharedWorkerName.IsVoid());
-  MOZ_ASSERT_IF(aWorkerType == WorkerTypeDedicated || aWorkerType == WorkerTypeVideo ,
+  MOZ_ASSERT_IF(aWorkerType == WorkerTypeDedicated,
                 aSharedWorkerName.IsEmpty());
 
   Maybe<WorkerLoadInfo> stackLoadInfo;
@@ -4787,14 +4787,10 @@ WorkerPrivate::Constructor(JSContext* aCx,
 
   MOZ_ASSERT(runtimeService);
 
-  nsRefPtr<WorkerPrivate> worker;
-  if (aWorkerType == WorkerTypeVideo) {
-      worker = new VideoWorkerPrivate(aCx, parent, aScriptURL, aIsChromeWorker,
-                                      aWorkerType, aSharedWorkerName, *aLoadInfo);
-  } else {
-      worker = new WorkerPrivate(aCx, parent, aScriptURL, aIsChromeWorker,
-                                 aWorkerType, aSharedWorkerName, *aLoadInfo);
-  }
+  nsRefPtr<WorkerPrivate> worker =
+    new WorkerPrivate(aCx, parent, aScriptURL, aIsChromeWorker,
+                      aWorkerType, aSharedWorkerName, *aLoadInfo);
+
   if (!runtimeService->RegisterWorker(aCx, worker)) {
     aRv.Throw(NS_ERROR_UNEXPECTED);
     return nullptr;
@@ -7170,8 +7166,6 @@ WorkerPrivate::GetOrCreateGlobalScope(JSContext* aCx)
       globalScope = new SharedWorkerGlobalScope(this, SharedWorkerName());
     } else if (IsServiceWorker()) {
       globalScope = new ServiceWorkerGlobalScope(this, SharedWorkerName());
-    } else if (IsVideoWorker()) {
-      globalScope = new VideoWorkerGlobalScope((this));
     } else {
       globalScope = new DedicatedWorkerGlobalScope(this);
     }
@@ -7362,69 +7356,5 @@ ChromeWorkerStructuredCloneCallbacks(bool aMainRuntime)
 
 // Force instantiation.
 template class WorkerPrivateParent<WorkerPrivate>;
-
-// static
-already_AddRefed<VideoWorkerPrivate>
-VideoWorkerPrivate::Constructor(const GlobalObject& aGlobal,
-                                const nsAString& aScriptURL,
-                                ErrorResult& aRv)
-{
-  return WorkerPrivate::Constructor(aGlobal, aScriptURL, false,
-                                    WorkerTypeVideo, EmptyCString(),
-                                    nullptr, aRv)
-                                    .downcast<VideoWorkerPrivate>();
-}
-
-JSObject*
-VideoWorkerPrivate::WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto)
-{
-  MOZ_ASSERT(!IsSharedWorker(),
-             "We should never wrap a WorkerPrivate for a SharedWorker");
-
-  AssertIsOnParentThread();
-
-  return VideoWorkerBinding::Wrap(aCx, this, aGivenProto);
-}
-
-
-bool
-VideoWorkerPrivate::ModifyBusyCount(JSContext* aCx, bool aIncrease)
-{
-  MutexAutoLock lock(mMutex);
-  NS_ASSERTION(aIncrease || mBusyCount, "Mismatched busy count mods!");
-
-  if (aIncrease) {
-    mBusyCount++;
-    return true;
-  }
-
-  if (--mBusyCount == 0) {
-
-    bool shouldCancel;
-    {
-      shouldCancel = mParentStatus == Terminating;
-    }
-
-    if (shouldCancel && !Cancel(aCx)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-VideoWorkerPrivate::VideoWorkerPrivate(JSContext* aCx, WorkerPrivate* aParent,
-                                       const nsAString& aScriptURL,
-                                       bool aIsChromeWorker,
-                                       WorkerType aWorkerType,
-                                       const nsACString& aSharedWorkerName,
-                                       WorkerLoadInfo& aLoadInfo)
-  : WorkerPrivate(aCx, aParent, aScriptURL, aIsChromeWorker,
-                  aWorkerType, aSharedWorkerName, aLoadInfo)
-{}
-
-VideoWorkerPrivate::~VideoWorkerPrivate()
-{
-}
 
 END_WORKERS_NAMESPACE

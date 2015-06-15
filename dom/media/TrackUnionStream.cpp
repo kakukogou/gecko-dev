@@ -32,21 +32,11 @@
 #include "AudioOutputObserver.h"
 #endif
 
-#include "WorkerPrivate.h"
-#include "WorkerRunnable.h"
-#include "VideoProcessEvent.h"
-#include "WorkerScope.h"
-#include "nsQueryObject.h"
-#include "VideoStreamTrack.h"
-#include "mozilla/dom/ImageBitmap.h"
-
 using namespace mozilla::layers;
 using namespace mozilla::dom;
 using namespace mozilla::gfx;
 
 namespace mozilla {
-
-using dom::workers::VideoWorkerPrivate;
 
 #ifdef STREAM_LOG
 #undef STREAM_LOG
@@ -168,179 +158,6 @@ TrackUnionStream::TrackUnionStream(DOMMediaStream* aWrapper) :
     }
   }
 
-  void TrackUnionStream::AddWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
-                                          TrackID aTrackID,
-                                          const nsString& aID)
-  {
-    class Message final : public ControlMessage
-    {
-    public:
-      Message(TrackUnionStream* aStream, VideoWorkerPrivate* aWorker,
-              TrackID aTrackID, const nsString& aID)
-        : ControlMessage(aStream), mVideoWorker(aWorker),
-          mTrackID(aTrackID), mID(aID)
-      {}
-      virtual void Run() override
-      {
-        mStream->AsTrackUnionStream()->AddWorkerMonitorImpl(mVideoWorker, mTrackID, mID);
-      }
-      VideoWorkerPrivate* mVideoWorker;
-      TrackID mTrackID;
-      nsString mID;
-    };
-    GraphImpl()->AppendMessage(new Message(this, aWorker,
-                                           aTrackID, aID));
-  }
-
-  void TrackUnionStream::AddWorkerMonitorImpl(dom::workers::VideoWorkerPrivate* aWorker,
-                                              TrackID aTrackID,
-                                              const nsString& aID)
-  {
-    for (uint32_t i = 0; i < mTrackMap.Length(); ++i) {
-      TrackMapEntry* entry = &mTrackMap[i];
-      if (entry->mOutputTrackID == aTrackID) {
-        entry->mID = aID;
-        bool bFound = false;
-        for (uint32_t j = 0; j < entry->mVideoWorkerMonitors.Length(); ++j) {
-          if (aWorker == entry->mVideoWorkerMonitors[j]) {
-            bFound = true;
-          }
-        }
-        if (!bFound) {
-          entry->mVideoWorkerMonitors.AppendElement(aWorker);
-        }
-      }
-    }
-  }
-
-  void TrackUnionStream::RemoveWorkerMonitor(dom::workers::VideoWorkerPrivate* aWorker,
-                                             TrackID aTrackID)
-  {
-    class Message final : public ControlMessage
-    {
-    public:
-      Message(TrackUnionStream* aStream, VideoWorkerPrivate* aWorker,
-              TrackID aTrackID)
-        : ControlMessage(aStream), mVideoWorker(aWorker),
-          mTrackID(aTrackID)
-      {}
-      virtual void Run() override
-      {
-        mStream->AsTrackUnionStream()->RemoveWorkerMonitorImpl(mVideoWorker, mTrackID);
-      }
-      VideoWorkerPrivate* mVideoWorker;
-      TrackID mTrackID;
-    };
-    GraphImpl()->AppendMessage(new Message(this, aWorker,
-                                           aTrackID));
-  }
-
-  void TrackUnionStream::RemoveWorkerMonitorImpl(dom::workers::VideoWorkerPrivate* aWorker,
-                                                 TrackID aTrackID)
-  {
-    for (uint32_t i = 0; i < mTrackMap.Length(); ++i) {
-      TrackMapEntry* entry = &mTrackMap[i];
-      if (entry->mOutputTrackID == aTrackID) {
-        if (entry->mVideoWorkerMonitors.RemoveElement(aWorker)) {
-          return;
-        }
-      }
-    }
-  }
-
-  void TrackUnionStream::AddWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
-                                            TrackID aTrackID,
-                                            const nsString& aID,
-                                            MediaInputPort* aPort)
-  {
-    class Message final : public ControlMessage
-    {
-    public:
-      Message(TrackUnionStream* aStream, VideoWorkerPrivate* aWorker,
-              TrackID aTrackID, const nsString& aID,
-              MediaInputPort* aPort)
-        : ControlMessage(aStream), mVideoWorker(aWorker),
-          mTrackID(aTrackID), mID(aID), mPort(aPort)
-      {}
-      virtual void Run() override
-      {
-        mStream->AsTrackUnionStream()->AddWorkerProcessorImpl(mVideoWorker, mTrackID, mID, mPort);
-      }
-      VideoWorkerPrivate* mVideoWorker;
-      TrackID mTrackID;
-      nsString mID;
-      MediaInputPort* mPort;
-    };
-    GraphImpl()->AppendMessage(new Message(this, aWorker,
-                                           aTrackID, aID, aPort));
-
-  }
-
-  void TrackUnionStream::AddWorkerProcessorImpl(dom::workers::VideoWorkerPrivate* aWorker,
-                                                TrackID aTrackID,
-                                                const nsString& aID,
-                                                MediaInputPort* aPort)
-  {
-    for (uint32_t i = 0; i < mTrackMap.Length(); ++i) {
-      TrackMapEntry* entry = &mTrackMap[i];
-      if (entry->mInputTrackID == aTrackID && entry->mInputPort == aPort) {
-        entry->mID = aID;
-        if (entry->mVideoWorkerProcessor) {
-          entry->mVideoWorkerProcessor = aWorker;
-        }
-        return;
-      }
-    }
-
-    MediaStream* sourceStream = aPort->GetSource();
-    for (StreamBuffer::TrackIter tracks(sourceStream->GetStreamBuffer());
-         !tracks.IsEnded(); tracks.Next()) {
-      TrackID id = tracks->GetID();
-      if (id == aTrackID) {
-        uint32_t mapIndex = AddTrack(aPort,
-                                     tracks.get(),
-                                     this->mGraph->CurrentDriver()->StateComputedTime());
-        bool trackFinished = false;
-        TrackMapEntry* entry = &mTrackMap[mapIndex];
-        entry->mVideoWorkerProcessor = aWorker;
-      }
-    }
-  }
-
-  void TrackUnionStream::RemoveWorkerProcessor(dom::workers::VideoWorkerPrivate* aWorker,
-                                               TrackID aTrackID)
-  {
-    class Message final : public ControlMessage
-    {
-    public:
-      Message(TrackUnionStream* aStream, VideoWorkerPrivate* aWorker,
-              TrackID aTrackID)
-        : ControlMessage(aStream), mVideoWorker(aWorker),
-          mTrackID(aTrackID)
-      {}
-      virtual void Run() override
-      {
-        mStream->AsTrackUnionStream()->RemoveWorkerProcessorImpl(mVideoWorker, mTrackID);
-      }
-      VideoWorkerPrivate* mVideoWorker;
-      TrackID mTrackID;
-    };
-    GraphImpl()->AppendMessage(new Message(this, aWorker,
-                                           aTrackID));
-  }
-
-  void TrackUnionStream::RemoveWorkerProcessorImpl(dom::workers::VideoWorkerPrivate* aWorker,
-                                               TrackID aTrackID)
-  {
-    for (uint32_t i = 0; i < mTrackMap.Length(); ++i) {
-      TrackMapEntry* entry = &mTrackMap[i];
-      if (entry->mOutputTrackID == aTrackID) {
-        entry->mVideoWorkerProcessor = nullptr;
-        return;
-      }
-    }
-  }
-
   uint32_t TrackUnionStream::AddTrack(MediaInputPort* aPort, StreamBuffer::Track* aTrack,
                     GraphTime aFrom)
   {
@@ -391,10 +208,6 @@ TrackUnionStream::TrackUnionStream(DOMMediaStream* aWrapper) :
     map->mInputTrackID = aTrack->GetID();
     map->mOutputTrackID = track->GetID();
     map->mSegment = aTrack->GetSegment()->CreateEmptyClone();
-    map->mLastImage = nullptr;
-    map->mOutputImage = nullptr;
-    map->mVideoWorkerProcessor = nullptr;
-    map->mLastOutputTime = 0;
     return mTrackMap.Length() - 1;
   }
 
@@ -414,87 +227,6 @@ TrackUnionStream::TrackUnionStream(DOMMediaStream* aWrapper) :
     }
     outputTrack->SetEnded();
   }
-
-
-  class VideoProcessEventRunnable final : public workers::WorkerRunnable {
-  public:
-    VideoProcessEventRunnable(workers::WorkerPrivate* aWorkerPrivate,
-                              TargetAndBusyBehavior aBehavior,
-                              StreamTime aPlaybackTime,
-                              const nsString& aID,
-                              layers::Image* aImage,
-                              layers::Image** aOutputImage)
-    :workers::WorkerRunnable(aWorkerPrivate, aBehavior),
-     mPlaybackTime(aPlaybackTime),
-     mID(aID),
-     mImage(aImage),
-     mOutputImage(aOutputImage)
-    {
-    }
-
-  private:
-    virtual bool
-    WorkerRun(JSContext* aCx, workers::WorkerPrivate* aWorkerPrivate) override
-    {
-      DOMEventTargetHelper* aTarget = aWorkerPrivate->GlobalScope();
-      nsRefPtr<VideoProcessEvent> event =
-        new VideoProcessEvent(aTarget,
-                              nullptr, nullptr);
-      nsresult rv = event->InitVideoProcessEvent(mPlaybackTime, mID, mImage);
-      if (NS_FAILED(rv)) {
-        xpc::Throw(aCx, rv);
-        return false;
-      }
-      event->SetTrusted(true);
-
-      nsCOMPtr<nsIDOMEvent> domEvent = do_QueryObject(event);
-
-      nsEventStatus dummy = nsEventStatus_eIgnore;
-      aTarget->DispatchDOMEvent(nullptr, domEvent, nullptr, &dummy);
-      if (event->HasOutputData())
-      {
-        ErrorResult eResult;
-        nsRefPtr<ImageBitmap> output = event->GetOutputImageBitmap(eResult);
-
-        nsRefPtr<layers::Image> tempImage = output->GetImage();
-        tempImage.forget(mOutputImage);
-      }
-      return true;
-    }
-
-    virtual bool
-    PreDispatch(JSContext* aCx, workers::WorkerPrivate* aWorkerPrivate) override
-    {
-      if (mBehavior == WorkerThreadModifyBusyCount) {
-        return aWorkerPrivate->ModifyBusyCount(aCx, true);
-      }
-
-      return true;
-    }
-
-    virtual void
-    PostDispatch(JSContext* aCx, workers::WorkerPrivate* aWorkerPrivate,
-                 bool aDispatchResult) override
-    {
-      MOZ_ASSERT(aWorkerPrivate);
-
-      if (!aDispatchResult) {
-        if (mBehavior == WorkerThreadModifyBusyCount) {
-          aWorkerPrivate->ModifyBusyCount(aCx, false);
-        }
-        if (aCx) {
-          JS_ReportPendingException(aCx);
-        }
-      }
-    }
-
-    ~VideoProcessEventRunnable(){
-    }
-    StreamTime mPlaybackTime;
-    nsString mID;
-    nsRefPtr<Image> mImage;
-    Image** mOutputImage;
-  };
 
   void TrackUnionStream::CopyTrackData(StreamBuffer::Track* aInputTrack,
                      uint32_t aMapIndex, GraphTime aFrom, GraphTime aTo,
@@ -540,68 +272,12 @@ TrackUnionStream::TrackUnionStream(DOMMediaStream* aWrapper) :
         if (GraphImpl()->StreamSuspended(source)) {
           segment->AppendNullData(aTo - aFrom);
         } else {
-//          if (map->mVideoWorkerProcessor && (outputTrack->GetEnd() != GraphTimeToStreamTime(interval.mStart))) {
-//            StreamTime duration = GraphTimeToStreamTime(interval.mStart) - outputTrack->GetEnd();
-//            if (!map->mOutputImage) {
-//              outputTrack->GetSegment()->AppendNullData(duration);
-//            } else {
-//              VideoSegment lastSegment;
-//              IntSize frameSize = map->mOutputImage->GetSize();
-//              lastSegment.AppendFrame(map->mOutputImage.forget(), duration, frameSize);
-//              outputTrack->GetSegment()->AppendFrom(&lastSegment);
-//            }
-//          } else {
-//            MOZ_ASSERT(outputTrack->GetEnd() == GraphTimeToStreamTime(interval.mStart),
-//                       "Samples missing");
-//          }
-
+          MOZ_ASSERT(outputTrack->GetEnd() == GraphTimeToStreamTime(interval.mStart),
+                     "Samples missing");
           StreamTime inputStart = source->GraphTimeToStreamTime(interval.mStart);
-          if (segment->GetType() == MediaSegment::VIDEO){
-            if (map->mVideoWorkerProcessor && map->mOutputImage) {
-                VideoSegment processedSegment;
-                IntSize frameSize = map->mOutputImage->GetSize();
-                StreamTime duration = inputEnd - map->mLastOutputTime;
-                map->mLastOutputTime = inputEnd;
-                processedSegment.AppendFrame(map->mOutputImage.forget(), duration, frameSize);
-                segment->AppendFrom(&processedSegment);
-            }
-            nsAutoPtr<MediaSegment> tmpSegment;
-            tmpSegment = aInputTrack->GetSegment()->CreateEmptyClone();
-            tmpSegment->AppendSlice(*aInputTrack->GetSegment(),
-                                   std::min(inputTrackEndPoint, inputStart),
-                                   std::min(inputTrackEndPoint, inputEnd));
-            VideoSegment* videoSegment = static_cast<VideoSegment*>(tmpSegment.get());
-            for (VideoSegment::ChunkIterator i(*videoSegment); !i.IsEnded(); i.Next()) {
-              VideoChunk& chunk = *i;
-              VideoFrame& frame = chunk.mFrame;
-              VideoFrame::Image* image = frame.GetImage();
-              if (image != map->mLastImage) {
-                map->mLastImage = image;
-                DispatchToVideoWorkerMonitor(map,
-                                             std::min(inputTrackEndPoint, source->GraphTimeToStreamTime(interval.mStart)),
-                                             map->mID);
-                if (map->mVideoWorkerProcessor) {
-                  nsRefPtr<VideoProcessEventRunnable> runnable =
-                    new VideoProcessEventRunnable(map->mVideoWorkerProcessor,
-                                                  workers::WorkerRunnable::WorkerThreadModifyBusyCount,
-                                                  std::min(inputTrackEndPoint, source->GraphTimeToStreamTime(interval.mStart)),
-                                                  map->mID,
-                                                  map->mLastImage,
-                                                  getter_AddRefs(map->mOutputImage));
-                   if(!runnable->Dispatch(nullptr)) {
-             //FIXME        rv.Throw(NS_ERROR_FALURE);
-                   }
-                }
-              }
-            }
-            if (!map->mVideoWorkerProcessor || !map->mLastImage) {
-              segment->AppendFrom(videoSegment);
-            }
-          } else {
-            segment->AppendSlice(*aInputTrack->GetSegment(),
-                                 std::min(inputTrackEndPoint, inputStart),
-                                 std::min(inputTrackEndPoint, inputEnd));
-          }
+          segment->AppendSlice(*aInputTrack->GetSegment(),
+                               std::min(inputTrackEndPoint, inputStart),
+                               std::min(inputTrackEndPoint, inputEnd));
         }
       }
       ApplyTrackDisabling(outputTrack->GetID(), segment);
@@ -613,27 +289,4 @@ TrackUnionStream::TrackUnionStream(DOMMediaStream* aWrapper) :
       outputTrack->GetSegment()->AppendFrom(segment);
     }
   }
-
-  void TrackUnionStream::DispatchToVideoWorkerMonitor(TrackMapEntry* aMapEntry,
-                                               StreamTime aPlaybackTime,
-                                               const nsString& aID)
-  {
-    if (0 == aMapEntry->mVideoWorkerMonitors.Length()) {
-      return;
-    }
-    for (uint32_t i = 0; i < aMapEntry->mVideoWorkerMonitors.Length(); ++i) {
-      workers::VideoWorkerPrivate* worker = aMapEntry->mVideoWorkerMonitors[i];
-      nsRefPtr<VideoProcessEventRunnable> runnable =
-          new VideoProcessEventRunnable(worker,
-                                        workers::WorkerRunnable::WorkerThreadModifyBusyCount,
-                                        aPlaybackTime,
-                                        aID,
-                                        aMapEntry->mLastImage,
-                                        getter_AddRefs(aMapEntry->mOutputImage));
-      ErrorResult rv;
-      if(!runnable->Dispatch(nullptr)) {
-//FIXME        rv.Throw(NS_ERROR_FALURE);
-      }
-    }
-  }
-} // namespace mozilla
+}
